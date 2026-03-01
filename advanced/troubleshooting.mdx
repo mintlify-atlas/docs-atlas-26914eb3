@@ -1,0 +1,746 @@
+---
+title: "Troubleshooting"
+description: "Common issues and solutions for Tinbox, including diagnostic checks with tinbox doctor"
+---
+
+This guide covers common issues you might encounter when using Tinbox and how to resolve them.
+
+## Quick Diagnostics
+
+Run the built-in diagnostic tool to check your setup:
+
+```bash
+tinbox doctor
+```
+
+This command checks:
+- System tools (poppler for PDF processing)
+- Python packages (pdf2image, python-docx, Pillow)
+- API key configuration (OpenAI, Anthropic, Google)
+- Local model availability (Ollama)
+
+<Info>
+The `doctor` command is defined in `src/tinbox/core/doctor.py` and performs comprehensive environment validation.
+</Info>
+
+## Common Issues
+
+### PDF Translation Issues
+
+<AccordionGroup>
+  <Accordion title="Error: 'poppler-utils not found'">
+    **Problem**: PDF processing requires poppler-utils to be installed.
+    
+    **Solution**: Install poppler for your operating system:
+    
+    ```bash
+    # macOS
+    brew install poppler
+    
+    # Linux (Ubuntu/Debian)
+    sudo apt-get install poppler-utils
+    
+    # Windows (Chocolatey)
+    choco install poppler
+    ```
+    
+    **Verify installation**:
+    ```bash
+    tinbox doctor  # Should show poppler-utils as ✅
+    which pdfinfo  # Should show path to pdfinfo binary
+    ```
+    
+    From `doctor.py:40-56`:
+    ```python
+    def check_poppler() -> DoctorCheck:
+        pdfinfo_path = shutil.which("pdfinfo")
+        if pdfinfo_path:
+            return DoctorCheck(
+                name="poppler-utils",
+                category="System Tools",
+                ok=True,
+                details=f"Found at {pdfinfo_path}",
+            )
+        return DoctorCheck(
+            name="poppler-utils",
+            category="System Tools",
+            ok=False,
+            hint="Install poppler: brew install poppler (macOS) or apt-get install poppler-utils (Linux)",
+        )
+    ```
+  </Accordion>
+
+  <Accordion title="Error: 'No module named pdf2image'">
+    **Problem**: Missing Python package for PDF image conversion.
+    
+    **Solution**: Install PDF dependencies:
+    
+    ```bash
+    pip install tinbox[pdf]
+    # Or install all extras
+    pip install tinbox[all]
+    ```
+    
+    **Verify installation**:
+    ```bash
+    tinbox doctor  # Should show pdf2image as ✅
+    python -c "import pdf2image; print(pdf2image.__version__)"
+    ```
+  </Accordion>
+
+  <Accordion title="Error: 'Model does not support vision'">
+    **Problem**: Trying to translate a PDF with a text-only model.
+    
+    **Solution**: Use a vision-capable model:
+    
+    ```bash
+    # ✅ Vision-capable models
+    tinbox translate --to es --model openai:gpt-4o document.pdf
+    tinbox translate --to es --model anthropic:claude-3-sonnet document.pdf
+    tinbox translate --to es --model gemini:gemini-2.5-pro document.pdf
+    
+    # ❌ Text-only models (will fail)
+    tinbox translate --to es --model ollama:llama3.1:8b document.pdf  # No vision
+    ```
+    
+    <Warning>
+    Ollama models typically do **not** support vision. Convert PDFs to text first or use cloud models.
+    </Warning>
+  </Accordion>
+
+  <Accordion title="Poor PDF quality / High costs">
+    **Problem**: PDF rendered at too high DPI, causing excessive token usage.
+    
+    **Solution**: Adjust DPI based on your needs:
+    
+    ```bash
+    # Default: 200 DPI (balanced)
+    tinbox translate --to es --pdf-dpi 200 --model openai:gpt-4o document.pdf
+    
+    # Lower quality, lower cost: 150 DPI
+    tinbox translate --to es --pdf-dpi 150 --model openai:gpt-4o document.pdf
+    
+    # High quality, higher cost: 300 DPI
+    tinbox translate --to es --pdf-dpi 300 --model openai:gpt-4o document.pdf
+    ```
+    
+    <Tip>
+    Use 150 DPI for simple text documents to save ~25% on costs.
+    </Tip>
+  </Accordion>
+</AccordionGroup>
+
+### API and Authentication Issues
+
+<AccordionGroup>
+  <Accordion title="Error: 'API key not found'">
+    **Problem**: API key environment variable not set.
+    
+    **Solution**: Set the appropriate API key for your model provider:
+    
+    ```bash
+    # OpenAI
+    export OPENAI_API_KEY="sk-..."
+    
+    # Anthropic
+    export ANTHROPIC_API_KEY="sk-ant-..."
+    
+    # Google
+    export GOOGLE_API_KEY="AIza..."
+    ```
+    
+    **Make it permanent** (add to `~/.bashrc` or `~/.zshrc`):
+    ```bash
+    echo 'export OPENAI_API_KEY="your-key-here"' >> ~/.bashrc
+    source ~/.bashrc
+    ```
+    
+    **Verify**:
+    ```bash
+    tinbox doctor  # Check API Keys section
+    echo $OPENAI_API_KEY  # Should show your key
+    ```
+    
+    From `doctor.py:126-144`:
+    ```python
+    def check_openai_key() -> DoctorCheck:
+        key = os.environ.get("OPENAI_API_KEY")
+        if key:
+            masked = f"{key[:8]}...{key[-4:]}" if len(key) > 12 else "***"
+            return DoctorCheck(
+                name="OPENAI_API_KEY",
+                category="API Keys",
+                ok=True,
+                details=f"Set ({masked})",
+            )
+        return DoctorCheck(
+            name="OPENAI_API_KEY",
+            category="API Keys",
+            ok=False,
+            hint="Set with: export OPENAI_API_KEY='your-key-here'",
+        )
+    ```
+  </Accordion>
+
+  <Accordion title="Error: 'Rate limit exceeded'">
+    **Problem**: Hitting API rate limits from the model provider.
+    
+    **Solutions**:
+    
+    1. **Use checkpoints to resume**:
+    ```bash
+    tinbox translate --to es \
+      --checkpoint-dir ./checkpoints \
+      --model openai:gpt-4o \
+      document.pdf
+    # If rate limited, wait and re-run - it will resume
+    ```
+    
+    2. **Reduce checkpoint frequency** to save less often:
+    ```bash
+    tinbox translate --to es \
+      --checkpoint-frequency 10 \
+      --model openai:gpt-4o \
+      document.pdf
+    ```
+    
+    3. **Switch to local model** (no rate limits):
+    ```bash
+    ollama serve  # In another terminal
+    tinbox translate --to es --model ollama:llama3.1:8b document.txt
+    ```
+    
+    <Note>
+    Rate limits vary by provider and API tier. Check your provider's documentation.
+    </Note>
+  </Accordion>
+
+  <Accordion title="Error: 'API timeout'">
+    **Problem**: API request taking too long, especially with large pages or high reasoning effort.
+    
+    **Solutions**:
+    
+    1. **Use checkpoints** to save progress:
+    ```bash
+    tinbox translate --to es \
+      --checkpoint-dir ./checkpoints \
+      --model openai:gpt-4o \
+      document.pdf
+    ```
+    
+    2. **Reduce reasoning effort**:
+    ```bash
+    # Minimal is fastest
+    tinbox translate --to es --reasoning-effort minimal --model openai:gpt-4o doc.pdf
+    ```
+    
+    3. **For PDFs, reduce DPI**:
+    ```bash
+    tinbox translate --to es --pdf-dpi 150 --model openai:gpt-4o document.pdf
+    ```
+    
+    4. **For text, reduce context size**:
+    ```bash
+    tinbox translate --to es --context-size 1500 --model openai:gpt-4o document.txt
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Package and Dependency Issues
+
+<AccordionGroup>
+  <Accordion title="Error: 'No module named docx'">
+    **Problem**: Missing python-docx package for Word document support.
+    
+    **Solution**:
+    ```bash
+    pip install tinbox[docx]
+    # Or install all extras
+    pip install tinbox[all]
+    ```
+    
+    **Verify**:
+    ```bash
+    tinbox doctor  # Should show python-docx as ✅
+    python -c "import docx; print('OK')"
+    ```
+    
+    From `doctor.py:81-100`:
+    ```python
+    def check_python_docx() -> DoctorCheck:
+        try:
+            import docx
+            return DoctorCheck(
+                name="python-docx",
+                category="Python Packages",
+                ok=True,
+                details="Installed",
+            )
+        except ImportError:
+            return DoctorCheck(
+                name="python-docx",
+                category="Python Packages",
+                ok=False,
+                hint="Install with: pip install tinbox[docx]",
+            )
+    ```
+  </Accordion>
+
+  <Accordion title="Error: 'No module named PIL'">
+    **Problem**: Missing Pillow package for image processing.
+    
+    **Solution**:
+    ```bash
+    pip install pillow
+    # Or install all extras
+    pip install tinbox[all]
+    ```
+    
+    **Verify**:
+    ```bash
+    tinbox doctor  # Should show Pillow as ✅
+    python -c "import PIL; print(PIL.__version__)"
+    ```
+  </Accordion>
+
+  <Accordion title="Python version incompatibility">
+    **Problem**: Tinbox requires Python 3.12 or higher.
+    
+    **Check your version**:
+    ```bash
+    python --version  # Should be 3.12+
+    ```
+    
+    **Solution**: Install Python 3.12 or higher:
+    ```bash
+    # macOS (using Homebrew)
+    brew install python@3.12
+    
+    # Ubuntu/Debian
+    sudo apt install python3.12
+    
+    # Or use pyenv
+    pyenv install 3.12.0
+    pyenv global 3.12.0
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Translation Quality Issues
+
+<AccordionGroup>
+  <Accordion title="Inconsistent terminology across pages">
+    **Problem**: Page-by-page algorithm doesn't share context between pages.
+    
+    **Solution**: Enable glossary to maintain consistency:
+    
+    ```bash
+    # Auto-build glossary during translation
+    tinbox translate --to es \
+      --glossary \
+      --save-glossary terms.json \
+      --model openai:gpt-4o \
+      document.pdf
+    
+    # Use existing glossary
+    tinbox translate --to es \
+      --glossary-file terms.json \
+      --model openai:gpt-4o \
+      document.pdf
+    ```
+    
+    <Note>
+    Glossary adds ~20% input token overhead but ensures consistent terminology (from cost.py:183-189).
+    </Note>
+  </Accordion>
+
+  <Accordion title="Poor translation quality">
+    **Problem**: Translation lacks nuance or makes errors.
+    
+    **Solutions**:
+    
+    1. **Increase reasoning effort**:
+    ```bash
+    tinbox translate --to es \
+      --reasoning-effort high \
+      --max-cost 20.00 \
+      --model openai:gpt-4o \
+      document.pdf
+    ```
+    
+    2. **Use a higher-quality model**:
+    ```bash
+    # Claude Sonnet often produces higher quality
+    tinbox translate --to es --model anthropic:claude-3-sonnet document.pdf
+    ```
+    
+    3. **For text files, use context-aware**:
+    ```bash
+    tinbox translate --to es \
+      --algorithm context-aware \
+      --context-size 2000 \
+      --model openai:gpt-4o \
+      document.txt
+    ```
+    
+    4. **Provide a glossary** with domain-specific terms:
+    ```json
+    {
+      "entries": {
+        "API": "Interfaz de Programación de Aplicaciones",
+        "webhook": "webhook",
+        "payload": "carga útil"
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Broken narrative flow in long documents">
+    **Problem**: Using page-by-page for continuous text documents.
+    
+    **Solution**: Use context-aware algorithm for text files:
+    
+    ```bash
+    # Maintains context between chunks
+    tinbox translate --to fr \
+      --algorithm context-aware \
+      --context-size 2000 \
+      --model openai:gpt-4o \
+      novel.txt
+    ```
+    
+    <Warning>
+    Context-aware is **not supported for PDFs**. For PDF narratives, use glossary instead:
+    
+    ```bash
+    tinbox translate --to fr \
+      --algorithm page \
+      --glossary \
+      --model openai:gpt-4o \
+      novel.pdf
+    ```
+    </Warning>
+  </Accordion>
+</AccordionGroup>
+
+### Cost and Performance Issues
+
+<AccordionGroup>
+  <Accordion title="Translation exceeds budget">
+    **Problem**: Cost higher than expected.
+    
+    **Solutions**:
+    
+    1. **Set a cost limit**:
+    ```bash
+    tinbox translate --to es --max-cost 5.00 --model openai:gpt-4o document.pdf
+    ```
+    
+    2. **Preview costs first**:
+    ```bash
+    tinbox translate --to es --dry-run --model openai:gpt-4o document.pdf
+    ```
+    
+    3. **Use cheaper algorithm**:
+    ```bash
+    # Page-by-page has no context overhead
+    tinbox translate --to es --algorithm page --model openai:gpt-4o document.pdf
+    ```
+    
+    4. **Use local models**:
+    ```bash
+    ollama serve
+    tinbox translate --to es --model ollama:llama3.1:8b document.txt  # Free
+    ```
+    
+    5. **Reduce PDF DPI**:
+    ```bash
+    tinbox translate --to es --pdf-dpi 150 --model openai:gpt-4o document.pdf
+    ```
+    
+    See the [Cost Optimization](/advanced/cost-optimization) guide for more strategies.
+  </Accordion>
+
+  <Accordion title="Translation too slow">
+    **Problem**: Translation taking longer than expected.
+    
+    **Solutions**:
+    
+    1. **Reduce reasoning effort**:
+    ```bash
+    tinbox translate --to es --reasoning-effort minimal --model openai:gpt-4o doc.pdf
+    ```
+    
+    2. **For text, increase context size** (fewer chunks to process):
+    ```bash
+    tinbox translate --to es --context-size 3000 --model openai:gpt-4o document.txt
+    ```
+    
+    3. **Use a faster model**:
+    ```bash
+    # GPT-4o is typically faster than Claude
+    tinbox translate --to es --model openai:gpt-4o document.pdf
+    ```
+    
+    4. **For PDFs, reduce DPI**:
+    ```bash
+    tinbox translate --to es --pdf-dpi 150 --model openai:gpt-4o document.pdf
+    ```
+    
+    <Note>
+    From cost.py:198-200, estimated speed:
+    - Cloud models: ~30 tokens/second
+    - Local models (Ollama): ~20 tokens/second
+    </Note>
+  </Accordion>
+
+  <Accordion title="Warning: 'Large document detected'">
+    **Problem**: Document has >50,000 tokens, costs may be high.
+    
+    From `cost.py:206-210`:
+    ```python
+    if estimated_total_tokens > 50000:
+        warnings.append(
+            f"Large document detected ({estimated_total_tokens:,} tokens). "
+            "Consider using Ollama for no cost."
+        )
+    ```
+    
+    **Solutions**:
+    
+    1. **Use local models** (completely free):
+    ```bash
+    ollama serve
+    tinbox translate --to es --model ollama:llama3.1:8b large_document.txt
+    ```
+    
+    2. **Set a cost limit**:
+    ```bash
+    tinbox translate --to es --max-cost 10.00 --model openai:gpt-4o large_document.txt
+    ```
+    
+    3. **Use checkpoints** to process in segments:
+    ```bash
+    tinbox translate --to es \
+      --checkpoint-dir ./checkpoints \
+      --checkpoint-frequency 10 \
+      --max-cost 5.00 \
+      --model openai:gpt-4o \
+      large_document.pdf
+    
+    # Resume after hitting limit
+    tinbox translate --to es \
+      --checkpoint-dir ./checkpoints \
+      --max-cost 5.00 \
+      --model openai:gpt-4o \
+      large_document.pdf
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Ollama and Local Model Issues
+
+<AccordionGroup>
+  <Accordion title="Error: 'Ollama not found'">
+    **Problem**: Ollama not installed or not in PATH.
+    
+    **Solution**: Install Ollama:
+    
+    ```bash
+    # Visit https://ollama.ai and download installer
+    # Or use Homebrew (macOS)
+    brew install ollama
+    ```
+    
+    **Verify**:
+    ```bash
+    tinbox doctor  # Should show Ollama as ✅
+    which ollama   # Should show path
+    ollama --version
+    ```
+    
+    From `doctor.py:187-203`:
+    ```python
+    def check_ollama() -> DoctorCheck:
+        ollama_path = shutil.which("ollama")
+        if ollama_path:
+            return DoctorCheck(
+                name="Ollama",
+                category="Local Models",
+                ok=True,
+                details=f"Found at {ollama_path}",
+            )
+        return DoctorCheck(
+            name="Ollama",
+            category="Local Models",
+            ok=False,
+            hint="Install from: https://ollama.ai (optional, for local models)",
+        )
+    ```
+  </Accordion>
+
+  <Accordion title="Error: 'Connection refused' when using Ollama">
+    **Problem**: Ollama server not running.
+    
+    **Solution**: Start Ollama server:
+    
+    ```bash
+    # In a separate terminal
+    ollama serve
+    ```
+    
+    **Then translate**:
+    ```bash
+    tinbox translate --to es --model ollama:llama3.1:8b document.txt
+    ```
+    
+    <Tip>
+    Keep `ollama serve` running in the background for all local model operations.
+    </Tip>
+  </Accordion>
+
+  <Accordion title="Error: 'Model not found' with Ollama">
+    **Problem**: Model not downloaded.
+    
+    **Solution**: Pull the model first:
+    
+    ```bash
+    ollama pull llama3.1:8b
+    ollama list  # Verify model is downloaded
+    ```
+    
+    **Then translate**:
+    ```bash
+    tinbox translate --to es --model ollama:llama3.1:8b document.txt
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Checkpoint and Resume Issues
+
+<AccordionGroup>
+  <Accordion title="Translation not resuming from checkpoint">
+    **Problem**: Re-running translation starts from beginning.
+    
+    **Causes and solutions**:
+    
+    1. **Different checkpoint directory**:
+    ```bash
+    # Make sure to use the SAME checkpoint directory
+    tinbox translate --to es --checkpoint-dir ./checkpoints --model openai:gpt-4o doc.pdf
+    # Resume
+    tinbox translate --to es --checkpoint-dir ./checkpoints --model openai:gpt-4o doc.pdf
+    ```
+    
+    2. **Different source or target language**:
+    ```bash
+    # These are different jobs, won't resume
+    tinbox translate --to es --checkpoint-dir ./chk --model openai:gpt-4o doc.pdf  # es
+    tinbox translate --to fr --checkpoint-dir ./chk --model openai:gpt-4o doc.pdf  # fr - different!
+    ```
+    
+    3. **Different algorithm**:
+    ```bash
+    # These are different jobs
+    tinbox translate --to es --algorithm page --checkpoint-dir ./chk --model openai:gpt-4o doc.pdf
+    tinbox translate --to es --algorithm context-aware --checkpoint-dir ./chk --model openai:gpt-4o doc.pdf  # Won't resume
+    ```
+  </Accordion>
+
+  <Accordion title="How to force restart (ignore checkpoints)">
+    **Problem**: Want to start fresh, ignoring existing checkpoints.
+    
+    **Solution**: Delete the checkpoint directory:
+    
+    ```bash
+    rm -rf ./checkpoints
+    tinbox translate --to es --checkpoint-dir ./checkpoints --model openai:gpt-4o doc.pdf
+    ```
+    
+    Or use a different checkpoint directory:
+    ```bash
+    tinbox translate --to es --checkpoint-dir ./checkpoints-new --model openai:gpt-4o doc.pdf
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Getting Help
+
+<Steps>
+  <Step title="Run tinbox doctor">
+    ```bash
+    tinbox doctor
+    ```
+    Check for environment and dependency issues.
+  </Step>
+  
+  <Step title="Check the README">
+    Review troubleshooting section in the [README](https://github.com/tinbox/tinbox/blob/main/README.md#troubleshooting).
+  </Step>
+  
+  <Step title="Enable verbose logging">
+    ```bash
+    # Set log level to DEBUG for detailed output
+    export TINBOX_LOG_LEVEL=DEBUG
+    tinbox translate --to es --model openai:gpt-4o document.pdf
+    ```
+  </Step>
+  
+  <Step title="Report issues">
+    If you've found a bug, report it on GitHub:
+    - Include `tinbox doctor` output
+    - Include error messages and logs
+    - Provide sample command that reproduces the issue
+    - Mention Python version and OS
+  </Step>
+</Steps>
+
+## Doctor Command Reference
+
+The `tinbox doctor` command performs these checks:
+
+### System Tools
+
+| Check | Category | Required For |
+|-------|----------|-------------|
+| poppler-utils | System Tools | PDF processing |
+
+### Python Packages
+
+| Package | Category | Required For |
+|---------|----------|-------------|
+| pdf2image | Python Packages | PDF to image conversion |
+| python-docx | Python Packages | Word document support |
+| Pillow | Python Packages | Image processing |
+
+### API Keys (Optional)
+
+| Key | Category | Required For |
+|-----|----------|-------------|
+| OPENAI_API_KEY | API Keys | OpenAI models (GPT-4o, GPT-5, etc.) |
+| ANTHROPIC_API_KEY | API Keys | Anthropic models (Claude) |
+| GOOGLE_API_KEY | API Keys | Google models (Gemini) |
+
+### Local Models (Optional)
+
+| Tool | Category | Required For |
+|------|----------|-------------|
+| Ollama | Local Models | Free local model inference |
+
+<Info>
+From `doctor.py:206-227`, the doctor command runs all checks and reports:
+- ✅ for passing checks
+- ❌ for failing checks
+- Helpful hints for fixing issues
+</Info>
+
+## Related Topics
+
+<CardGroup cols={2}>
+  <Card title="Cost Optimization" icon="dollar-sign" href="/advanced/cost-optimization">
+    Strategies to reduce costs and prevent budget overruns
+  </Card>
+  <Card title="Algorithm Comparison" icon="brain" href="/advanced/algorithms-comparison">
+    Choose the right algorithm for your use case
+  </Card>
+</CardGroup>

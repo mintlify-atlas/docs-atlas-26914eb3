@@ -1,0 +1,317 @@
+---
+title: "Translation Algorithms Comparison"
+description: "Understand and choose the right translation algorithm for your document type and use case"
+---
+
+Tinbox provides three translation algorithms, each optimized for different scenarios. Understanding when to use each algorithm will help you achieve the best translation quality and cost efficiency.
+
+## Available Algorithms
+
+<CardGroup cols={3}>
+  <Card title="Page-by-Page" icon="file">
+    Best for PDFs and documents with clear page boundaries
+  </Card>
+  <Card title="Context-Aware" icon="brain">
+    Default for text files, maintains context across chunks
+  </Card>
+  <Card title="Sliding Window" icon="window">
+    Legacy algorithm, deprecated in favor of context-aware
+  </Card>
+</CardGroup>
+
+## Algorithm Comparison
+
+| Feature | Page-by-Page | Context-Aware | Sliding Window |
+|---------|--------------|---------------|----------------|
+| **Best For** | PDFs, image documents | Text files, long documents | Legacy use only |
+| **Context Preservation** | None between pages | Full context between chunks | Limited overlap |
+| **Cost Efficiency** | High | Medium (4x context overhead) | Medium |
+| **Quality** | Good for independent pages | Excellent for continuous text | Good |
+| **Supports PDF** | ✅ Yes | ❌ No | ❌ No |
+| **Resumable** | ✅ Yes | ✅ Yes | ✅ Yes |
+| **Glossary Support** | ✅ Yes | ✅ Yes | ✅ Yes |
+
+## Page-by-Page Algorithm
+
+Translates documents one page at a time without context between pages.
+
+### How It Works
+
+```python
+# From algorithms.py:147-354
+async def translate_page_by_page(
+    content: DocumentContent,
+    config: TranslationConfig,
+    translator: ModelInterface,
+    # ...
+):
+    # Translates each page independently
+    for page_num, page in enumerate(content.pages, start=1):
+        request = TranslationRequest(
+            content=page,
+            context=None,  # No context between pages
+            # ...
+        )
+        response = await translator.translate(request)
+```
+
+### Use Cases
+
+<AccordionGroup>
+  <Accordion title="PDF Documents">
+    **Best choice for PDFs** - Each PDF page is processed as a separate image by vision-capable models (GPT-4o, Claude Sonnet, Gemini Pro).
+    
+    ```bash
+    tinbox translate --to es --algorithm page --model openai:gpt-4o document.pdf
+    ```
+  </Accordion>
+
+  <Accordion title="Documents with Independent Pages">
+    Documents where each page is self-contained (presentations, forms, reports with clear page breaks).
+    
+    ```bash
+    tinbox translate --to de --algorithm page --model anthropic:claude-3-sonnet report.pdf
+    ```
+  </Accordion>
+
+  <Accordion title="Cost-Sensitive Projects">
+    When you want to minimize input tokens - no context overhead means lower costs.
+    
+    <Note>
+      This algorithm has **no context overhead**, making it the most cost-effective option.
+    </Note>
+  </Accordion>
+</AccordionGroup>
+
+### Advantages
+
+- **Low cost**: No context overhead between pages
+- **Fast processing**: Pages can theoretically be processed in parallel
+- **Simple error handling**: Failed pages don't affect others
+- **Memory efficient**: Only one page in memory at a time
+
+### Limitations
+
+- **No context preservation**: Terms and style may vary between pages
+- **Not suitable for continuous narratives**: Stories or articles may lose coherence
+- **Text-only for non-PDFs**: Treats each page independently
+
+## Context-Aware Algorithm
+
+The default algorithm for text files, using smart text splitting at natural boundaries while maintaining context between chunks.
+
+### How It Works
+
+```python
+# From algorithms.py:762-938
+async def translate_context_aware(
+    content: DocumentContent,
+    config: TranslationConfig,
+    # ...
+):
+    # Smart splitting at natural boundaries
+    chunks = smart_text_split(text, context_size, config.custom_split_token)
+    
+    # Translate with context from previous chunk
+    for i, current_chunk in enumerate(chunks):
+        context_info = build_translation_context_info(
+            previous_chunk=previous_chunk,
+            previous_translation=previous_translation,
+            next_chunk=next_chunk,
+        )
+        
+        request = TranslationRequest(
+            content=current_chunk,
+            context=context_info,  # Includes previous and next chunks
+            # ...
+        )
+```
+
+### Smart Text Splitting
+
+The algorithm splits text at natural boundaries in this priority order:
+
+1. **Custom split token** (if provided) - ignores target size
+2. **Paragraph breaks** (`\n\n`)
+3. **Sentence endings** (`.!?` followed by space)
+4. **Line breaks** (`\n`)
+5. **Clause boundaries** (`;:,` followed by space)
+6. **Word boundaries** (whitespace)
+7. **Character position** (fallback)
+
+<Info>
+Smart splitting ensures chunks break at natural points, preventing mid-sentence or mid-word breaks that could harm translation quality.
+</Info>
+
+### Context Information
+
+Each chunk receives context in this format:
+
+```text
+[PREVIOUS_CHUNK]
+... previous chunk text ...
+[/PREVIOUS_CHUNK]
+
+[PREVIOUS_CHUNK_TRANSLATION]
+... previous translation ...
+[/PREVIOUS_CHUNK_TRANSLATION]
+
+[NEXT_CHUNK]
+... next chunk text ...
+[/NEXT_CHUNK]
+
+Use this context to maintain consistency in terminology and style.
+```
+
+### Use Cases
+
+<AccordionGroup>
+  <Accordion title="Long Text Documents">
+    **Default for .txt files** - Maintains narrative flow and terminology consistency.
+    
+    ```bash
+    tinbox translate --to fr --context-size 2000 --model openai:gpt-4o novel.txt
+    ```
+  </Accordion>
+
+  <Accordion title="Continuous Narratives">
+    Stories, articles, books where context between sections is crucial.
+    
+    ```bash
+    tinbox translate --to ja --context-size 1500 --model anthropic:claude-3-sonnet story.txt
+    ```
+  </Accordion>
+
+  <Accordion title="Structured Documents with Custom Delimiters">
+    Documents with clear section markers that should be used as split points.
+    
+    ```bash
+    # Split on "---" markers
+    tinbox translate --to es --split-token "---" --model openai:gpt-4o chapters.txt
+    ```
+  </Accordion>
+</AccordionGroup>
+
+### Advantages
+
+- **Excellent coherence**: Context ensures consistent terminology and style
+- **Smart splitting**: Breaks at natural boundaries, not mid-sentence
+- **Bidirectional context**: Uses both previous and next chunks
+- **Glossary friendly**: Works excellently with glossary feature
+
+### Limitations
+
+- **Higher cost**: ~4x input token overhead due to context (see src/tinbox/core/cost.py:125-142)
+- **Text only**: Not supported for PDF/image content
+- **Sequential processing**: Must process chunks in order
+
+<Warning>
+Context-aware algorithm increases **input tokens by ~4x** due to context overhead. Use `--dry-run` to preview costs before translating large documents.
+</Warning>
+
+### Configuration
+
+```bash
+# Adjust chunk size (default: 2000 characters)
+tinbox translate --to es --context-size 1500 --model openai:gpt-4o document.txt
+
+# Use custom split token
+tinbox translate --to fr --split-token "###" --model openai:gpt-4o sections.txt
+
+# Preview costs before translating
+tinbox translate --to de --dry-run --model openai:gpt-4o large_doc.txt
+```
+
+## Sliding Window Algorithm
+
+<Warning>
+This algorithm is **deprecated** and kept only for backwards compatibility. Use **context-aware** instead for better results.
+</Warning>
+
+Translates text by creating overlapping windows with fixed size and overlap.
+
+### How It Works
+
+```python
+# From algorithms.py:357-517
+async def translate_sliding_window(
+    content: DocumentContent,
+    config: TranslationConfig,
+    # ...
+):
+    # Create fixed-size overlapping windows
+    windows = create_windows(text, window_size, overlap_size)
+    
+    # Translate each window independently
+    for window in windows:
+        request = TranslationRequest(
+            content=window,
+            context=None,  # No context
+            # ...
+        )
+    
+    # Merge windows by removing overlap
+    final_text = merge_chunks(translated_windows, overlap_size)
+```
+
+### Why It's Deprecated
+
+- **Fixed window size**: Doesn't respect natural boundaries
+- **No context**: Each window translated independently
+- **Overlap complexity**: Merging overlapping translations is unreliable
+- **Inferior to context-aware**: The context-aware algorithm provides better quality with smart splitting
+
+<Note>
+If you have a use case requiring sliding window, consider using context-aware with `--context-size` instead.
+</Note>
+
+## Choosing the Right Algorithm
+
+<Steps>
+  <Step title="Check Your Document Type">
+    - **PDF?** → Use `--algorithm page`
+    - **Text file?** → Use default (context-aware) or specify `--algorithm context-aware`
+  </Step>
+  
+  <Step title="Consider Your Requirements">
+    - **Need context preservation?** → Context-aware
+    - **Cost sensitive?** → Page-by-page
+    - **Continuous narrative?** → Context-aware
+    - **Independent pages?** → Page-by-page
+  </Step>
+  
+  <Step title="Test with Dry Run">
+    ```bash
+    tinbox translate --to es --dry-run --model openai:gpt-4o document.pdf
+    ```
+    Preview costs and token estimates before committing.
+  </Step>
+</Steps>
+
+## Algorithm Performance Tips
+
+<Tip>
+**Page-by-Page**
+- Use with `--checkpoint-frequency 5` to save progress every 5 pages
+- Enable `--glossary` to maintain terminology consistency across pages
+- Set `--max-cost` to prevent runaway costs on large PDFs
+</Tip>
+
+<Tip>
+**Context-Aware**
+- Adjust `--context-size` based on document structure (smaller for more breaks, larger for continuous text)
+- Use `--split-token` for documents with clear section markers
+- Enable `--glossary` for automatic term extraction and consistency
+- Monitor costs with `--max-cost` due to context overhead
+</Tip>
+
+## Related Topics
+
+<CardGroup cols={2}>
+  <Card title="Cost Optimization" icon="dollar-sign" href="/advanced/cost-optimization">
+    Learn how to minimize translation costs
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="/advanced/troubleshooting">
+    Common issues and solutions
+  </Card>
+</CardGroup>

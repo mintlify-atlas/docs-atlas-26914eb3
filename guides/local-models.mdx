@@ -1,0 +1,409 @@
+---
+title: Running Local Models with Ollama
+description: Translate documents locally using Ollama for unlimited, free translations
+---
+
+Run translations completely locally using Ollama - no API keys, no costs, no rate limits. Perfect for privacy-sensitive documents, development, or unlimited translations.
+
+## Why Use Local Models?
+
+**Advantages:**
+- **Zero Cost** - Unlimited translations without API fees
+- **Privacy** - Documents never leave your machine
+- **No Rate Limits** - Translate as much as you want
+- **Offline Capable** - Work without internet connection
+- **Fast Iteration** - No network latency for small documents
+
+**Tradeoffs:**
+- Lower quality compared to GPT-5 or Claude 4
+- Slower on CPU-only machines
+- Cannot process PDFs (no vision capability)
+- Requires local compute resources
+
+<Note>
+Local models work best for text files. For PDF translation, you'll need cloud models with vision capabilities.
+</Note>
+
+## Setup
+
+<Steps>
+  <Step title="Install Ollama">
+    Download and install Ollama from [ollama.ai](https://ollama.ai):
+
+    ```bash macOS/Linux
+    curl -fsSL https://ollama.ai/install.sh | sh
+    ```
+
+    ```bash Windows
+    # Download from https://ollama.ai/download
+    ```
+  </Step>
+
+  <Step title="Pull a Model">
+    Download a translation-capable model:
+
+    ```bash
+    # Recommended: Llama 3.1 (8B) - good balance
+    ollama pull llama3.1:8b
+
+    # Larger model for better quality
+    ollama pull llama3.1:70b
+
+    # Smaller model for speed
+    ollama pull llama3.1:3b
+
+    # Alternative: Mistral
+    ollama pull mistral-small
+    ```
+  </Step>
+
+  <Step title="Start Ollama Server">
+    ```bash
+    ollama serve
+    ```
+
+    Keep this running in a separate terminal.
+  </Step>
+
+  <Step title="Translate with Tinbox">
+    ```bash
+    tinbox translate --to es --model ollama:llama3.1:8b document.txt
+    ```
+  </Step>
+</Steps>
+
+## Basic Usage
+
+### Simple Translation
+
+```bash
+# Start Ollama (in separate terminal)
+ollama serve
+
+# Translate with local model
+tinbox translate --to de --model ollama:llama3.1:8b ./examples/story.txt
+```
+
+### Specify Output File
+
+```bash
+tinbox translate --to fr \
+  --model ollama:llama3.1:8b \
+  --output document_fr.txt \
+  document.txt
+```
+
+## Choosing a Model
+
+### Model Comparison
+
+| Model | Size | Speed | Quality | Best For |
+|-------|------|-------|---------|----------|
+| **llama3.1:3b** | 3B params | Fast | Basic | Quick drafts, simple text |
+| **llama3.1:8b** | 8B params | Medium | Good | General use, balanced |
+| **llama3.1:70b** | 70B params | Slow | Best | High quality, complex docs |
+| **mistral-small** | 7B params | Medium | Good | Alternative to Llama |
+| **qwen2.5:32b** | 32B params | Medium-Slow | Very Good | Technical documents |
+
+<Tip>
+Start with `llama3.1:8b` for the best balance of speed and quality.
+</Tip>
+
+### Model Selection Examples
+
+<CodeGroup>
+```bash Fast & Lightweight
+# Best for: Quick translations, simple content
+ollama pull llama3.1:3b
+tinbox translate --to es --model ollama:llama3.1:3b document.txt
+```
+
+```bash Balanced (Recommended)
+# Best for: Most use cases
+ollama pull llama3.1:8b
+tinbox translate --to de --model ollama:llama3.1:8b document.txt
+```
+
+```bash High Quality
+# Best for: Complex or technical documents
+ollama pull llama3.1:70b
+tinbox translate --to fr --model ollama:llama3.1:70b technical_doc.txt
+```
+</CodeGroup>
+
+## Performance Optimization
+
+### Hardware Considerations
+
+**GPU Acceleration (Recommended)**
+- NVIDIA GPU: CUDA support built-in
+- Apple Silicon: Metal acceleration automatic
+- AMD GPU: ROCm support on Linux
+
+**CPU-Only**
+- Works but slower
+- Smaller models (3b-8b) are more practical
+- Expect 2-10x slower than GPU
+
+### Improving Speed
+
+```bash
+# Use smaller model for faster processing
+tinbox translate --to es --model ollama:llama3.1:3b large_document.txt
+
+# Reduce context size for faster chunks
+tinbox translate --to es \
+  --context-size 1000 \
+  --model ollama:llama3.1:8b \
+  large_document.txt
+```
+
+<Warning>
+Larger models (70b+) require significant RAM/VRAM:
+- 70B model needs ~40GB+ RAM
+- 8B model needs ~8GB RAM
+- 3B model needs ~4GB RAM
+</Warning>
+
+## Limitations
+
+### No PDF Support
+
+Local models in Ollama don't have vision capabilities and cannot process PDFs:
+
+```bash
+# This will FAIL
+tinbox translate --to es --model ollama:llama3.1:8b document.pdf
+
+# Error: PDF files require vision-capable models
+```
+
+**Solution:** Use cloud models for PDFs:
+```bash
+tinbox translate --to es --model openai:gpt-4o document.pdf
+```
+
+### Quality Differences
+
+Local models produce lower quality translations than GPT-5 or Claude 4:
+
+- Less nuanced understanding
+- More literal translations
+- Weaker handling of idioms and context
+- May miss subtle meanings
+
+<Tip>
+For critical documents, consider:
+1. Translate with local model (free/fast)
+2. Review and identify issues
+3. Re-translate specific sections with cloud models
+</Tip>
+
+## Use Cases
+
+### Development & Testing
+
+```bash
+# Test translation pipelines without API costs
+tinbox translate --to es --model ollama:llama3.1:8b test_document.txt
+
+# Iterate on chunking strategies
+tinbox translate --to fr \
+  --context-size 1000 \
+  --model ollama:llama3.1:8b \
+  test.txt
+
+tinbox translate --to fr \
+  --context-size 2000 \
+  --model ollama:llama3.1:8b \
+  test.txt
+```
+
+### Large-Scale Translations
+
+```bash
+# Translate many documents without cost concerns
+for file in docs/*.txt; do
+  tinbox translate --to es \
+    --model ollama:llama3.1:8b \
+    --output "translated/$(basename "$file")" \
+    "$file"
+done
+```
+
+### Privacy-Sensitive Documents
+
+```bash
+# Keep confidential documents local
+tinbox translate --to de \
+  --model ollama:llama3.1:8b \
+  confidential_report.txt
+```
+
+### Draft Translations
+
+```bash
+# Get quick drafts locally, refine with cloud models later
+tinbox translate --to fr \
+  --model ollama:llama3.1:8b \
+  --output draft_fr.txt \
+  document.txt
+
+# Review draft, then use cloud model for final version
+tinbox translate --to fr \
+  --model openai:gpt-5-2025-08-07 \
+  --output final_fr.txt \
+  document.txt
+```
+
+## Combining with Other Features
+
+### Local Models + Checkpoints
+
+```bash
+# Free unlimited translations with resume capability
+tinbox translate --to es \
+  --checkpoint-dir ./checkpoints \
+  --model ollama:llama3.1:8b \
+  huge_document.txt
+```
+
+### Local Models + Glossaries
+
+```bash
+# Build glossary locally for free
+tinbox translate --to de \
+  --glossary \
+  --save-glossary terms.json \
+  --model ollama:llama3.1:8b \
+  technical_doc.txt
+```
+
+### Hybrid Workflow
+
+```bash
+# 1. Build glossary with local model (free)
+tinbox translate --to es \
+  --glossary \
+  --save-glossary terms.json \
+  --model ollama:llama3.1:8b \
+  sample_doc.txt
+
+# 2. Use glossary with cloud model for quality
+tinbox translate --to es \
+  --glossary-file terms.json \
+  --model openai:gpt-5-2025-08-07 \
+  full_document.txt
+```
+
+## Troubleshooting
+
+### "Connection refused" Error
+
+```bash
+# Make sure Ollama is running
+ollama serve
+
+# In another terminal
+tinbox translate --to es --model ollama:llama3.1:8b document.txt
+```
+
+### "Model not found" Error
+
+```bash
+# Pull the model first
+ollama pull llama3.1:8b
+
+# Then translate
+tinbox translate --to es --model ollama:llama3.1:8b document.txt
+```
+
+### Slow Performance
+
+```bash
+# Use a smaller model
+ollama pull llama3.1:3b
+tinbox translate --to es --model ollama:llama3.1:3b document.txt
+
+# Or reduce context size
+tinbox translate --to es \
+  --context-size 1000 \
+  --model ollama:llama3.1:8b \
+  document.txt
+```
+
+### Out of Memory
+
+```bash
+# Switch to smaller model
+ollama pull llama3.1:3b
+
+# Or close other applications to free RAM
+```
+
+### Poor Translation Quality
+
+```bash
+# Try a larger model
+ollama pull llama3.1:70b
+tinbox translate --to es --model ollama:llama3.1:70b document.txt
+
+# Or use cloud model for better quality
+tinbox translate --to es --model openai:gpt-5-2025-08-07 document.txt
+```
+
+## Checking Ollama Setup
+
+Use the doctor command to verify Ollama installation:
+
+```bash
+tinbox doctor
+```
+
+This checks:
+- Ollama installation
+- Ollama server status
+- Available models
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Start Small" icon="download">
+    Begin with `llama3.1:8b` before trying larger models
+  </Card>
+  <Card title="Use for Development" icon="code">
+    Perfect for testing without API costs
+  </Card>
+  <Card title="Privacy First" icon="lock">
+    Ideal for confidential documents
+  </Card>
+  <Card title="Hybrid Approach" icon="arrows-split-up-and-left">
+    Combine local and cloud models strategically
+  </Card>
+</CardGroup>
+
+| Scenario | Recommended Approach |
+|----------|---------------------|
+| **Text files** | Local models work great |
+| **PDF files** | Must use cloud models (vision required) |
+| **Development** | Local models for testing |
+| **Production** | Cloud models for quality |
+| **Confidential** | Local models for privacy |
+| **Large scale** | Local models to control costs |
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Large Documents" icon="file-lines" href="/guides/large-documents">
+    Translate large files with local models
+  </Card>
+  <Card title="Using Glossaries" icon="book" href="/guides/using-glossaries">
+    Build glossaries for free with local models
+  </Card>
+  <Card title="Checkpoints & Resume" icon="bookmark" href="/guides/checkpoints-and-resume">
+    Enable resumable local translations
+  </Card>
+  <Card title="CLI Reference" icon="terminal" href="/api/translate">
+    Complete command-line reference
+  </Card>
+</CardGroup>

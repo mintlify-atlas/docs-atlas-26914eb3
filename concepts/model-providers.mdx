@@ -1,0 +1,379 @@
+---
+title: Model Providers
+description: OpenAI, Anthropic, Google, and Ollama model support in Tinbox
+---
+
+Tinbox supports four major AI model providers, each with unique strengths. Choose your provider based on quality requirements, cost constraints, and infrastructure preferences.
+
+## Supported Providers
+
+<CardGroup cols={2}>
+  <Card title="OpenAI" icon="openai" color="#10a37f">
+    GPT-4o and GPT-5 models with vision and extended thinking support
+  </Card>
+  <Card title="Anthropic" icon="robot" color="#d97706">
+    Claude models with strong multilingual capabilities
+  </Card>
+  <Card title="Google" icon="google" color="#4285f4">
+    Gemini models with competitive pricing and performance
+  </Card>
+  <Card title="Ollama" icon="server" color="#7c3aed">
+    Local models with zero API costs and full privacy
+  </Card>
+</CardGroup>
+
+## Model Types
+
+From `types.py:21-28`:
+
+```python
+class ModelType(str, Enum):
+    """Supported LLM model providers."""
+    
+    OPENAI = "openai"      # OpenAI models (GPT-4, etc.)
+    ANTHROPIC = "anthropic"  # Anthropic models (Claude)
+    OLLAMA = "ollama"      # Local models via Ollama
+    GEMINI = "gemini"      # Google's Gemini models
+```
+
+## OpenAI
+
+OpenAI provides state-of-the-art language models with strong multilingual support and vision capabilities.
+
+### Available Models
+
+- **GPT-5** (2025-08-07): Latest flagship model with extended thinking
+- **GPT-4o**: Fast and cost-effective with vision support
+- **GPT-4-turbo**: Previous generation turbo model
+
+### Pricing
+
+From `cost.py:22-27`:
+
+```python
+ModelType.OPENAI: (
+    0.00125,  # $0.00125 per 1K input tokens
+    0.01,     # $0.01 per 1K output tokens (GPT-5)
+)
+```
+
+### CLI Usage
+
+```bash
+# Default GPT-5 model
+tinbox translate --to de --model openai document.pdf
+
+# Specific model version
+tinbox translate --to de --model openai:gpt-4o document.pdf
+
+# With extended thinking (reasoning models)
+tinbox translate --to de --model openai:gpt-5-2025-08-07 \
+  --reasoning-effort high \
+  document.pdf
+```
+
+### Environment Setup
+
+```bash
+export OPENAI_API_KEY="sk-..."
+```
+
+<Tip>
+  GPT-5 with extended thinking (`--reasoning-effort high`) produces exceptional translation quality but increases cost and time significantly. Use for critical documents only.
+</Tip>
+
+### Features
+
+- ✅ Vision support (for PDF images)
+- ✅ Extended thinking (reasoning models)
+- ✅ Checkpoint/resume
+- ✅ Glossary support
+- ✅ Fast inference
+- ✅ High quality output
+
+## Anthropic
+
+Anthropic's Claude models excel at nuanced language understanding and long-form content translation.
+
+### Available Models
+
+- **Claude Sonnet 4**: Latest model with extended thinking
+- **Claude 3.5 Sonnet**: Fast and cost-effective
+- **Claude 3 Opus**: Highest quality (previous generation)
+
+### Pricing
+
+From `cost.py:28-31`:
+
+```python
+ModelType.ANTHROPIC: (
+    0.003,    # $0.003 per 1K input tokens
+    0.015,    # $0.015 per 1K output tokens (Sonnet 4)
+)
+```
+
+### CLI Usage
+
+```bash
+# Default Claude Sonnet 4
+tinbox translate --to de --model anthropic document.pdf
+
+# Specific model version
+tinbox translate --to de --model anthropic:claude-3-5-sonnet document.pdf
+
+# With extended thinking
+tinbox translate --to de --model anthropic:claude-sonnet-4-20250514 \
+  --reasoning-effort medium \
+  document.pdf
+```
+
+### Environment Setup
+
+```bash
+export ANTHROPIC_API_KEY="sk-ant-..."
+```
+
+<Info>
+  Claude models are particularly strong at maintaining consistent tone and style across long documents. Ideal for literary translations.
+</Info>
+
+### Features
+
+- ✅ Vision support (for PDF images)
+- ✅ Extended thinking (reasoning models)
+- ✅ Checkpoint/resume
+- ✅ Glossary support
+- ✅ Strong multilingual support
+- ✅ Excellent at literary translation
+
+## Google (Gemini)
+
+Google's Gemini models offer competitive performance with cost-effective pricing.
+
+### Available Models
+
+- **Gemini 2.5 Pro**: Latest model with strong multilingual support
+- **Gemini 1.5 Pro**: Previous generation
+- **Gemini Flash**: Fast and economical
+
+### Pricing
+
+From `cost.py:32-35`:
+
+```python
+ModelType.GEMINI: (
+    0.00125,  # $0.00125 per 1K input tokens
+    0.01,     # $0.01 per 1K output tokens (Gemini 2.5 Pro)
+)
+```
+
+### CLI Usage
+
+```bash
+# Default Gemini 2.5 Pro
+tinbox translate --to de --model gemini document.pdf
+
+# Specific model version
+tinbox translate --to de --model gemini:gemini-2.5-flash document.pdf
+```
+
+### Environment Setup
+
+```bash
+export GOOGLE_API_KEY="AIza..."
+```
+
+<Note>
+  Gemini models offer the same pricing as OpenAI but with different strengths. Test both to see which works better for your use case.
+</Note>
+
+### Features
+
+- ✅ Vision support (for PDF images)
+- ✅ Checkpoint/resume
+- ✅ Glossary support
+- ✅ Fast inference
+- ✅ Cost-effective pricing
+
+## Ollama (Local Models)
+
+Ollama runs models locally on your machine, providing zero-cost translation with complete privacy.
+
+### Available Models
+
+Any model available in Ollama can be used:
+
+- **Llama 3**: Strong general-purpose model
+- **Mistral**: Fast and efficient
+- **Gemma**: Google's open model
+- **Qwen**: Excellent multilingual support
+
+### Pricing
+
+From `cost.py:36`:
+
+```python
+ModelType.OLLAMA: (0.0, 0.0),  # Free for local models
+```
+
+### Setup
+
+1. Install Ollama: https://ollama.ai/download
+2. Pull a model:
+
+```bash
+ollama pull llama3:8b
+```
+
+3. Translate:
+
+```bash
+tinbox translate --to de --model ollama:llama3:8b document.txt
+```
+
+### CLI Usage
+
+```bash
+# Using Llama 3
+tinbox translate --to de --model ollama:llama3:8b document.txt
+
+# Using Qwen for multilingual
+tinbox translate --to ja --model ollama:qwen2:7b document.txt
+
+# Using Mistral
+tinbox translate --to es --model ollama:mistral:7b document.txt
+```
+
+<Warning>
+  Local models don't support vision, so PDF files must be processed as text. They also don't support extended thinking (reasoning).
+</Warning>
+
+### Features
+
+- ✅ Zero cost
+- ✅ Complete privacy
+- ✅ Checkpoint/resume
+- ✅ Glossary support
+- ✅ Offline operation
+- ❌ No vision support
+- ❌ No extended thinking
+- ⚠️ Slower than cloud models
+- ⚠️ Quality varies by model
+
+### Performance Considerations
+
+From `cost.py:198-200`:
+
+```python
+# Estimate time (very rough estimate)
+# Assume 30 tokens/second for cloud models, 20 tokens/second for local
+tokens_per_second = 20 if model == ModelType.OLLAMA else 30
+```
+
+<Tip>
+  Use Ollama for large documents where cost would otherwise be prohibitive. The quality is acceptable for most use cases, especially with larger models (13B+).
+</Tip>
+
+## Model Selection Syntax
+
+Tinbox supports flexible model selection:
+
+```bash
+# Provider only (uses default model)
+tinbox translate --to de --model openai document.pdf
+
+# Provider with specific model
+tinbox translate --to de --model openai:gpt-4o document.pdf
+
+# Provider with model and version
+tinbox translate --to de --model openai:gpt-5-2025-08-07 document.pdf
+
+# Ollama with model and size
+tinbox translate --to de --model ollama:llama3:8b document.txt
+```
+
+## Reasoning Effort Levels
+
+Extended thinking models (OpenAI GPT-5, Anthropic Sonnet 4) support reasoning effort configuration:
+
+From `types.py:110-113`:
+
+```python
+reasoning_effort: Literal["minimal", "low", "medium", "high"] = Field(
+    default="minimal",
+    description="Model reasoning effort level. Higher levels improve quality but increase cost and time significantly.",
+)
+```
+
+### Effort Levels
+
+- **minimal** (default): Standard translation, no extended thinking
+- **low**: Brief reasoning, 2-3x cost
+- **medium**: Moderate reasoning, 5-10x cost
+- **high**: Deep reasoning, 10-20x cost
+
+```bash
+# Minimal (default)
+tinbox translate --to de --model openai document.pdf
+
+# Low reasoning
+tinbox translate --to de --model openai --reasoning-effort low document.pdf
+
+# High reasoning for critical translation
+tinbox translate --to de --model openai --reasoning-effort high \
+  --max-cost 50.00 \
+  document.pdf
+```
+
+<Warning>
+  Higher reasoning effort dramatically increases both cost and time. Always set `--max-cost` when using `medium` or `high` effort levels.
+</Warning>
+
+## Cost Tracking
+
+All models (except Ollama) track real-time costs during translation. See [Cost Tracking](/concepts/cost-tracking) for details.
+
+## Choosing the Right Provider
+
+<AccordionGroup>
+  <Accordion title="When to use OpenAI">
+    - You need vision support for PDF translation
+    - You want the highest quality output
+    - You need extended thinking for critical translations
+    - Cost is not the primary concern
+  </Accordion>
+  
+  <Accordion title="When to use Anthropic">
+    - You're translating literary or creative content
+    - You need consistent tone and style
+    - You value nuanced language understanding
+    - You want extended thinking capabilities
+  </Accordion>
+  
+  <Accordion title="When to use Google (Gemini)">
+    - You want competitive quality at lower cost
+    - You need fast inference
+    - You're translating general-purpose content
+    - You want an alternative to OpenAI
+  </Accordion>
+  
+  <Accordion title="When to use Ollama">
+    - Cost is a critical factor
+    - You need complete privacy
+    - You're translating large volumes
+    - You have local compute resources
+    - You're willing to accept lower quality
+  </Accordion>
+</AccordionGroup>
+
+## Provider Comparison
+
+| Feature | OpenAI | Anthropic | Google | Ollama |
+|---------|--------|-----------|--------|--------|
+| **Cost (1K tokens)** | $0.00125-$0.01 | $0.003-$0.015 | $0.00125-$0.01 | Free |
+| **Vision** | ✅ Yes | ✅ Yes | ✅ Yes | ❌ No |
+| **Reasoning** | ✅ Yes | ✅ Yes | ❌ No | ❌ No |
+| **Speed** | Fast | Fast | Fast | Slow |
+| **Quality** | Excellent | Excellent | Very Good | Good |
+| **Privacy** | Cloud | Cloud | Cloud | Local |
+| **Offline** | ❌ No | ❌ No | ❌ No | ✅ Yes |

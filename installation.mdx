@@ -1,0 +1,325 @@
+---
+title: "Installation"
+description: "Set up Tinbox and install all required dependencies for document translation"
+---
+
+## System Requirements
+
+<Info>
+  Tinbox requires **Python 3.12 or higher** to run properly.
+</Info>
+
+Before installing Tinbox, ensure your system meets these requirements:
+
+- **Python**: 3.12 or 3.13
+- **Operating System**: macOS, Linux, or Windows
+- **System Tools**: Poppler (required for PDF processing)
+
+## Python Installation
+
+<Tabs>
+  <Tab title="macOS">
+    ```bash
+    # Using Homebrew
+    brew install python@3.12
+    
+    # Verify installation
+    python3 --version
+    ```
+  </Tab>
+  
+  <Tab title="Linux">
+    ```bash
+    # Ubuntu/Debian
+    sudo apt update
+    sudo apt install python3.12 python3-pip
+    
+    # Verify installation
+    python3 --version
+    ```
+  </Tab>
+  
+  <Tab title="Windows">
+    Download and install Python 3.12+ from [python.org](https://www.python.org/downloads/)
+    
+    Make sure to check "Add Python to PATH" during installation.
+  </Tab>
+</Tabs>
+
+## Installing Tinbox
+
+<Tabs>
+  <Tab title="Recommended (All Features)">
+    Install Tinbox with all features enabled (PDF, DOCX, image processing):
+    
+    ```bash
+    pip install -e ".[all]"
+    ```
+    
+    This includes:
+    - PDF processing with pdf2image
+    - Word document (DOCX) support
+    - Image processing capabilities
+  </Tab>
+  
+  <Tab title="PDF Only">
+    Install with PDF support only:
+    
+    ```bash
+    pip install -e ".[pdf]"
+    ```
+  </Tab>
+  
+  <Tab title="DOCX Only">
+    Install with Word document support only:
+    
+    ```bash
+    pip install -e ".[docx]"
+    ```
+  </Tab>
+  
+  <Tab title="Base Package">
+    Install the base package (text files only):
+    
+    ```bash
+    pip install tinbox
+    ```
+  </Tab>
+</Tabs>
+
+## System Dependencies
+
+### Poppler (Required for PDF Processing)
+
+<Warning>
+  PDF translation will not work without Poppler installed on your system.
+</Warning>
+
+Poppler is required to convert PDF pages to images for vision-capable models:
+
+<Tabs>
+  <Tab title="macOS">
+    ```bash
+    brew install poppler
+    ```
+  </Tab>
+  
+  <Tab title="Linux (Ubuntu/Debian)">
+    ```bash
+    sudo apt-get update
+    sudo apt-get install poppler-utils
+    ```
+  </Tab>
+  
+  <Tab title="Linux (Fedora)">
+    ```bash
+    sudo dnf install poppler-utils
+    ```
+  </Tab>
+  
+  <Tab title="Windows">
+    Using Chocolatey:
+    ```bash
+    choco install poppler
+    ```
+    
+    Or download manually from [poppler for Windows](http://blog.alivate.com.au/poppler-windows/)
+  </Tab>
+</Tabs>
+
+## API Keys Setup
+
+Tinbox requires API keys to access LLM providers. Set up the keys for your preferred provider:
+
+<CodeGroup>
+  ```bash OpenAI
+  export OPENAI_API_KEY="sk-your-openai-api-key-here"
+  ```
+  
+  ```bash Anthropic
+  export ANTHROPIC_API_KEY="sk-ant-your-anthropic-key-here"
+  ```
+  
+  ```bash Google
+  export GOOGLE_API_KEY="your-google-api-key-here"
+  ```
+  
+  ```bash All Providers
+  # Add to your ~/.bashrc or ~/.zshrc for persistence
+  export OPENAI_API_KEY="sk-your-openai-key"
+  export ANTHROPIC_API_KEY="sk-ant-your-anthropic-key"
+  export GOOGLE_API_KEY="your-google-key"
+  ```
+</CodeGroup>
+
+<Tip>
+  To make API keys permanent, add the export commands to your shell profile:
+  - **Bash**: `~/.bashrc` or `~/.bash_profile`
+  - **Zsh**: `~/.zshrc`
+  - **Fish**: `~/.config/fish/config.fish`
+</Tip>
+
+### Getting API Keys
+
+<CardGroup cols={3}>
+  <Card title="OpenAI" icon="openai" href="https://platform.openai.com/api-keys">
+    Get your OpenAI API key for GPT-4o and GPT-5 models
+  </Card>
+  
+  <Card title="Anthropic" icon="robot" href="https://console.anthropic.com/">
+    Get your Anthropic API key for Claude models
+  </Card>
+  
+  <Card title="Google AI" icon="google" href="https://ai.google.dev/">
+    Get your Google API key for Gemini models
+  </Card>
+</CardGroup>
+
+## Local Models with Ollama
+
+<Info>
+  Want to use local models without API costs? Install Ollama for free local translation.
+</Info>
+
+<Steps>
+  <Step title="Install Ollama">
+    Download and install from [ollama.ai](https://ollama.ai)
+    
+    ```bash
+    # macOS/Linux
+    curl -fsSL https://ollama.ai/install.sh | sh
+    ```
+  </Step>
+  
+  <Step title="Pull a Model">
+    ```bash
+    # Download a model (e.g., Llama 3.1)
+    ollama pull llama3.1:8b
+    ```
+  </Step>
+  
+  <Step title="Start Ollama Server">
+    ```bash
+    ollama serve
+    ```
+    
+    Keep this running in a separate terminal.
+  </Step>
+  
+  <Step title="Use with Tinbox">
+    ```bash
+    tinbox translate --to de --model ollama:llama3.1:8b document.txt
+    ```
+  </Step>
+</Steps>
+
+## Verify Installation
+
+Run the diagnostic tool to check your setup:
+
+```bash
+tinbox doctor
+```
+
+This command checks:
+- ✅ Python version (3.12+)
+- ✅ Required system tools (poppler)
+- ✅ Optional dependencies (pdf2image, python-docx)
+- ✅ API key configuration
+
+### Example Output
+
+```
+🔍 Checking Tinbox Setup...
+
+✅ Python version: 3.12.0
+✅ Poppler installed: /usr/local/bin/pdftoimage
+✅ pdf2image available
+✅ python-docx available
+✅ OpenAI API key configured
+⚠️  Anthropic API key not found
+
+Setup complete! You're ready to translate documents.
+```
+
+## Development Installation
+
+<Accordion title="For contributors and developers">
+  If you want to contribute to Tinbox or modify the source code:
+  
+  ```bash
+  # Clone the repository
+  git clone <repository-url>
+  cd tinbox
+  
+  # Create a virtual environment
+  python3 -m venv .venv
+  source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+  
+  # Install with development dependencies
+  pip install -e ".[dev]"
+  ```
+  
+  This includes additional tools:
+  - pytest for testing
+  - black for code formatting
+  - mypy for type checking
+  - ruff for linting
+  - pytest-cov for coverage reports
+</Accordion>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="PDF translation fails" icon="file-pdf">
+    **Problem**: Error when translating PDFs
+    
+    **Solutions**:
+    1. Install poppler: `brew install poppler` (macOS) or `sudo apt-get install poppler-utils` (Linux)
+    2. Use a vision-capable model: GPT-4o, Claude Sonnet, or Gemini Pro Vision
+    3. Install PDF extras: `pip install tinbox[pdf]`
+  </Accordion>
+  
+  <Accordion title="No module named pdf2image" icon="triangle-exclamation">
+    **Problem**: Missing PDF processing library
+    
+    **Solution**: Install PDF support:
+    ```bash
+    pip install tinbox[pdf]
+    # or
+    pip install -e ".[all]"
+    ```
+  </Accordion>
+  
+  <Accordion title="API key not found" icon="key">
+    **Problem**: "API key not configured" error
+    
+    **Solution**: Set your API key as an environment variable:
+    ```bash
+    export OPENAI_API_KEY="your-key-here"
+    ```
+    
+    Make it permanent by adding to `~/.bashrc` or `~/.zshrc`
+  </Accordion>
+  
+  <Accordion title="Translation times out" icon="clock">
+    **Problem**: Large documents timeout or fail
+    
+    **Solutions**:
+    1. Use smaller chunks: `--context-size 1500`
+    2. Enable checkpointing: `--checkpoint-dir ./checkpoints`
+    3. Use page-by-page for PDFs: `--algorithm page`
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Jump into translating your first document
+  </Card>
+  
+  <Card title="Introduction" icon="book" href="/introduction">
+    Learn more about Tinbox features and capabilities
+  </Card>
+</CardGroup>

@@ -1,0 +1,577 @@
+---
+title: "Output Formats"
+description: "Understanding and using different output formats: Text, JSON, and Markdown"
+---
+
+Tinbox supports three output formats to suit different use cases, from simple translated text to detailed reports with metadata.
+
+## Available Formats
+
+<CardGroup cols={3}>
+  <Card title="Text" icon="file-text">
+    Plain translated text, default format
+  </Card>
+  <Card title="JSON" icon="code">
+    Structured data with metadata for programmatic use
+  </Card>
+  <Card title="Markdown" icon="markdown">
+    Formatted report with translation and statistics
+  </Card>
+</CardGroup>
+
+## Format Comparison
+
+| Format | Use Case | Output To | Metadata | Statistics |
+|--------|----------|-----------|----------|------------|
+| **Text** | General use, human reading | File or stdout | ❌ No | ❌ No |
+| **JSON** | API integration, data processing | File or stdout | ✅ Full | ✅ Full |
+| **Markdown** | Documentation, reports | File or stdout | ✅ Full | ✅ Full |
+
+## Text Format
+
+The default output format containing only the translated text.
+
+### Usage
+
+```bash
+# Default format (text)
+tinbox translate --to es --model openai:gpt-4o document.txt
+
+# Explicit text format
+tinbox translate --to es --format text --model openai:gpt-4o document.txt
+
+# Save to file
+tinbox translate --to es --output translated.txt --model openai:gpt-4o document.txt
+```
+
+### Implementation
+
+```python
+# From output.py:97-115
+class TextOutputHandler:
+    """Handler for plain text output format."""
+
+    def write(
+        self,
+        output: TranslationOutput,
+        file: Path | None = None,
+    ) -> None:
+        # Just write the translated text
+        if file:
+            file.write_text(output.result.text, encoding="utf-8")
+        else:
+            print(output.result.text)
+```
+
+### Example Output
+
+```text
+Esta es la traducción de su documento. El texto aparece exactamente
+como fue traducido por el modelo, sin metadatos adicionales ni formato.
+
+Si hay páginas que fallaron, verá marcadores de posición en el texto:
+[TRANSLATION_FAILED: Page 5]
+Reason: API timeout
+[/TRANSLATION_FAILED]
+```
+
+### Use Cases
+
+<AccordionGroup>
+  <Accordion title="Quick Translations">
+    When you just need the translated text without metadata:
+    
+    ```bash
+    tinbox translate --to fr --model openai:gpt-4o email.txt > email_fr.txt
+    ```
+  </Accordion>
+
+  <Accordion title="Pipeline Integration">
+    When feeding output to another tool:
+    
+    ```bash
+    tinbox translate --to es --model openai:gpt-4o input.txt | wc -w
+    ```
+  </Accordion>
+
+  <Accordion title="Human Reading">
+    When the translation is for direct human consumption:
+    
+    ```bash
+    tinbox translate --to de --output article_de.txt --model openai:gpt-4o article.txt
+    ```
+  </Accordion>
+</AccordionGroup>
+
+<Tip>
+Text format is the most versatile - it can be piped, redirected, or saved without any post-processing.
+</Tip>
+
+## JSON Format
+
+Structured output with complete metadata, perfect for programmatic use.
+
+### Usage
+
+```bash
+# JSON to stdout
+tinbox translate --to es --format json --model openai:gpt-4o document.txt
+
+# Save JSON to file
+tinbox translate --to es --format json --output result.json --model openai:gpt-4o document.txt
+```
+
+### Implementation
+
+```python
+# From output.py:63-94
+class JSONOutputHandler:
+    """Handler for JSON output format."""
+
+    def write(
+        self,
+        output: TranslationOutput,
+        file: Path | None = None,
+    ) -> None:
+        # Convert to JSON-serializable dict
+        data = output.model_dump(
+            mode="json",
+            exclude_none=True,
+        )
+
+        # Convert Path objects to strings
+        data["metadata"]["input_file"] = str(data["metadata"]["input_file"])
+        
+        # Format JSON with indentation
+        json_str = json.dumps(data, indent=2)
+        
+        if file:
+            file.write_text(json_str, encoding="utf-8")
+        else:
+            print(json_str)
+```
+
+### Schema
+
+```typescript
+interface TranslationOutput {
+  metadata: {
+    source_lang: string;        // e.g., "en"
+    target_lang: string;        // e.g., "es"
+    model: string;              // e.g., "openai"
+    algorithm: string;          // e.g., "page"
+    input_file: string;         // Path to input file
+    input_file_type: string;    // e.g., "pdf", "txt", "docx"
+    timestamp: string;          // ISO 8601 format
+  };
+  result: {
+    text: string;               // Translated text
+    tokens_used: number;        // Total tokens consumed
+    cost: number;               // Total cost in USD
+    time_taken: number;         // Time in seconds
+    failed_pages?: number[];    // Array of failed page numbers
+    page_errors?: {             // Error messages by page
+      [page: number]: string;
+    };
+  };
+  warnings?: string[];          // Warning messages
+  errors?: string[];            // Error messages
+}
+```
+
+### Example Output
+
+```json
+{
+  "metadata": {
+    "source_lang": "en",
+    "target_lang": "es",
+    "model": "openai",
+    "algorithm": "page",
+    "input_file": "/home/user/document.pdf",
+    "input_file_type": "pdf",
+    "timestamp": "2026-03-01T14:30:45.123456"
+  },
+  "result": {
+    "text": "Esta es la traducción completa...",
+    "tokens_used": 12543,
+    "cost": 0.187,
+    "time_taken": 45.3,
+    "failed_pages": [5, 12],
+    "page_errors": {
+      "5": "API timeout after 30s",
+      "12": "Rate limit exceeded"
+    }
+  },
+  "warnings": [
+    "Translation incomplete: 2 page(s) failed to translate (pages: 5, 12)"
+  ],
+  "errors": []
+}
+```
+
+### Use Cases
+
+<AccordionGroup>
+  <Accordion title="API Integration">
+    Parse JSON output in your application:
+    
+    ```python
+    import json
+    import subprocess
+    
+    result = subprocess.run([
+        "tinbox", "translate",
+        "--to", "es",
+        "--format", "json",
+        "--model", "openai:gpt-4o",
+        "document.pdf"
+    ], capture_output=True, text=True)
+    
+    data = json.loads(result.stdout)
+    print(f"Cost: ${data['result']['cost']:.2f}")
+    print(f"Tokens: {data['result']['tokens_used']:,}")
+    ```
+  </Accordion>
+
+  <Accordion title="Batch Processing">
+    Track costs across multiple translations:
+    
+    ```bash
+    for doc in *.pdf; do
+      tinbox translate --to es --format json --model openai:gpt-4o "$doc" > "${doc%.pdf}.json"
+    done
+    
+    # Analyze costs
+    jq '.result.cost' *.json | jq -s add
+    ```
+  </Accordion>
+
+  <Accordion title="Quality Monitoring">
+    Detect and log failed pages:
+    
+    ```python
+    data = json.loads(output)
+    if data["result"].get("failed_pages"):
+        for page, error in data["result"]["page_errors"].items():
+            log.error(f"Page {page} failed: {error}")
+    ```
+  </Accordion>
+</AccordionGroup>
+
+<Tip>
+Use JSON format when you need to programmatically access translation statistics, costs, or handle failures.
+</Tip>
+
+## Markdown Format
+
+Human-readable report with formatted sections and statistics.
+
+### Usage
+
+```bash
+# Markdown to stdout
+tinbox translate --to es --format markdown --model openai:gpt-4o document.txt
+
+# Save Markdown to file
+tinbox translate --to es --format markdown --output report.md --model openai:gpt-4o document.txt
+```
+
+### Implementation
+
+```python
+# From output.py:118-187
+class MarkdownOutputHandler:
+    """Handler for Markdown output format."""
+
+    def write(
+        self,
+        output: TranslationOutput,
+        file: Path | None = None,
+    ) -> None:
+        # Build Markdown content
+        md_lines = [
+            "# Translation Results\n",
+            "## Metadata",
+            f"- Source Language: {output.metadata.source_lang}",
+            f"- Target Language: {output.metadata.target_lang}",
+            f"- Model: {output.metadata.model.value}",
+            f"- Algorithm: {output.metadata.algorithm}",
+            f"- Input File: {output.metadata.input_file.name}",
+            f"- File Type: {output.metadata.input_file_type.value}",
+            f"- Timestamp: {output.metadata.timestamp.isoformat()}\n",
+            "## Translation",
+            "```text",
+            output.result.text,
+            "```\n",
+            "## Statistics",
+            f"- Tokens Used: {output.result.tokens_used:,}",
+            f"- Cost: ${output.result.cost:.4f}",
+            f"- Time Taken: {output.result.time_taken:.1f}s\n",
+        ]
+
+        # Add warnings and errors sections...
+```
+
+### Example Output
+
+```markdown
+# Translation Results
+
+## Metadata
+- Source Language: en
+- Target Language: es
+- Model: openai
+- Algorithm: page
+- Input File: document.pdf
+- File Type: pdf
+- Timestamp: 2026-03-01T14:30:45.123456
+
+## Translation
+Esta es la traducción completa del documento.
+El texto aparece formateado en un bloque de código.
+
+## Statistics
+- Tokens Used: 12,543
+- Cost: $0.1870
+- Time Taken: 45.3s
+
+## Warnings
+- Translation incomplete: 2 page(s) failed to translate (pages: 5, 12)
+
+## Errors
+[None]
+```
+
+### Use Cases
+
+<AccordionGroup>
+  <Accordion title="Documentation">
+    Keep translation records with full context:
+    
+    ```bash
+    tinbox translate --to es --format markdown --output translation-report.md --model openai:gpt-4o whitepaper.pdf
+    ```
+    
+    Share the Markdown report with stakeholders.
+  </Accordion>
+
+  <Accordion title="Translation Archives">
+    Maintain an archive of all translations with metadata:
+    
+    ```bash
+    # Create archive directory
+    mkdir -p translations/$$(date +%Y-%m-%d)
+    
+    # Translate and save report
+    tinbox translate --to es \
+      --format markdown \
+      --output translations/$$(date +%Y-%m-%d)/report.md \
+      --model openai:gpt-4o \
+      document.pdf
+    ```
+  </Accordion>
+
+  <Accordion title="Cost Reporting">
+    Generate readable cost reports for accounting:
+    
+    ```bash
+    for doc in *.pdf; do
+      tinbox translate --to es \
+        --format markdown \
+        --output "reports/${doc%.pdf}-es.md" \
+        --model openai:gpt-4o \
+        "$doc"
+    done
+    
+    # Reports include timestamp, cost, and tokens for each translation
+    ```
+  </Accordion>
+</AccordionGroup>
+
+<Tip>
+Markdown format is perfect for human-readable reports that you can commit to version control or share with teams.
+</Tip>
+
+## Metadata Structure
+
+All formats (JSON and Markdown) include this metadata:
+
+```python
+# From output.py:25-34
+class TranslationMetadata(BaseModel):
+    """Metadata about the translation process."""
+
+    source_lang: str
+    target_lang: str
+    model: ModelType
+    algorithm: str
+    input_file: Path
+    input_file_type: FileType
+    timestamp: datetime = Field(default_factory=datetime.now)
+```
+
+### Fields Explained
+
+<AccordionGroup>
+  <Accordion title="source_lang">
+    Source language code (ISO 639-1)
+    
+    Examples: `"en"`, `"zh"`, `"es"`, `"auto"` (if auto-detected)
+  </Accordion>
+
+  <Accordion title="target_lang">
+    Target language code (ISO 639-1)
+    
+    Examples: `"es"`, `"fr"`, `"de"`, `"ja"`
+  </Accordion>
+
+  <Accordion title="model">
+    Model provider used for translation
+    
+    Values: `"openai"`, `"anthropic"`, `"gemini"`, `"ollama"`
+  </Accordion>
+
+  <Accordion title="algorithm">
+    Translation algorithm used
+    
+    Values: `"page"`, `"context-aware"`, `"sliding-window"`
+  </Accordion>
+
+  <Accordion title="input_file">
+    Path to the input file that was translated
+    
+    Example: `"/home/user/documents/report.pdf"`
+  </Accordion>
+
+  <Accordion title="input_file_type">
+    Type of input file
+    
+    Values: `"pdf"`, `"docx"`, `"txt"`
+  </Accordion>
+
+  <Accordion title="timestamp">
+    ISO 8601 timestamp of when translation started
+    
+    Example: `"2026-03-01T14:30:45.123456"`
+  </Accordion>
+</AccordionGroup>
+
+## Translation Result Structure
+
+```python
+# From output.py:37-43
+class TranslationOutput(BaseModel):
+    """Complete translation output including metadata."""
+
+    metadata: TranslationMetadata
+    result: TranslationResult
+    warnings: list[str] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
+```
+
+### Result Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `text` | string | The complete translated text |
+| `tokens_used` | integer | Total tokens consumed (input + output) |
+| `cost` | float | Total cost in USD |
+| `time_taken` | float | Translation time in seconds |
+| `failed_pages` | integer[] | Array of page numbers that failed (optional) |
+| `page_errors` | object | Map of page numbers to error messages (optional) |
+
+## Choosing the Right Format
+
+<Steps>
+  <Step title="Identify Your Use Case">
+    - **Human reading**: Text or Markdown
+    - **Programmatic use**: JSON
+    - **Documentation**: Markdown
+    - **Data processing**: JSON
+  </Step>
+  
+  <Step title="Consider Your Workflow">
+    - **Pipeline integration**: Text (easiest to pipe)
+    - **API responses**: JSON (structured data)
+    - **Reports and archives**: Markdown (readable + metadata)
+    - **Simple translation**: Text (clean output)
+  </Step>
+  
+  <Step title="Select and Test">
+    ```bash
+    # Try each format on a small document
+    tinbox translate --to es --format text --model openai:gpt-4o sample.txt
+    tinbox translate --to es --format json --model openai:gpt-4o sample.txt
+    tinbox translate --to es --format markdown --model openai:gpt-4o sample.txt
+    ```
+  </Step>
+</Steps>
+
+## Format Combination Examples
+
+### Save Translation and Report Separately
+
+```bash
+# 1. Save translated text
+tinbox translate --to es \
+  --format text \
+  --output translated.txt \
+  --model openai:gpt-4o \
+  document.pdf
+
+# 2. Generate report
+tinbox translate --to es \
+  --format markdown \
+  --output report.md \
+  --model openai:gpt-4o \
+  document.pdf
+```
+
+<Warning>
+This will translate the document **twice** and charge you double. Better approach:
+
+```bash
+# Translate once as JSON, then extract text separately
+tinbox translate --to es --format json --model openai:gpt-4o document.pdf > result.json
+jq -r '.result.text' result.json > translated.txt
+```
+</Warning>
+
+### Batch Translation with JSON Logging
+
+```bash
+#!/bin/bash
+
+for doc in *.pdf; do
+  echo "Translating $doc..."
+  
+  # Translate and save both outputs
+  tinbox translate --to es \
+    --format json \
+    --model openai:gpt-4o \
+    "$doc" > "logs/${doc%.pdf}.json"
+  
+  # Extract text from JSON
+  jq -r '.result.text' "logs/$${doc%.pdf}.json" > "translated/$${doc%.pdf}_es.txt"
+  
+  # Log cost
+  cost=$$(jq '.result.cost' "logs/$${doc%.pdf}.json")
+  echo "$doc: $${cost}" >> cost_log.txt
+done
+
+# Calculate total cost
+total=$$(jq -s 'map(.result.cost) | add' logs/*.json)
+echo "Total cost: $${total}"
+```
+
+## Related Topics
+
+<CardGroup cols={2}>
+  <Card title="Algorithm Comparison" icon="brain" href="/advanced/algorithms-comparison">
+    Understand which algorithm produces which output structure
+  </Card>
+  <Card title="Cost Optimization" icon="dollar-sign" href="/advanced/cost-optimization">
+    Monitor costs using JSON output format
+  </Card>
+</CardGroup>

@@ -1,0 +1,418 @@
+---
+title: Cost Tracking
+description: How Tinbox estimates and tracks translation costs in real-time
+---
+
+Tinbox provides comprehensive cost estimation and tracking to help you manage translation expenses. Get upfront estimates before starting and monitor real-time costs during translation.
+
+## Cost Estimation
+
+Before starting any translation, Tinbox estimates the total cost based on document size, model, and algorithm.
+
+### How It Works
+
+From `cost.py:145-243`:
+
+```python
+def estimate_cost(
+    file_path: Path,
+    model: ModelType,
+    *,
+    algorithm: str = "page",
+    max_cost: float | None = None,
+    use_glossary: bool = False,
+    reasoning_effort: str = "minimal",
+) -> CostEstimate:
+    """Estimate the cost of translating a document."""
+    estimated_tokens = estimate_document_tokens(file_path)
+    input_cost_per_1k, output_cost_per_1k = MODEL_COSTS.get(model, (0.0, 0.0))
+    
+    # Calculate input tokens based on algorithm
+    if algorithm == "context-aware":
+        input_tokens = estimate_context_aware_tokens(estimated_tokens)
+        output_tokens = estimated_tokens
+    else:
+        input_tokens = estimated_tokens
+        output_tokens = estimated_tokens
+    
+    # Add prompt overhead (3%)
+    prompt_factor = 0.03
+    input_tokens = math.ceil(input_tokens * (1 + prompt_factor))
+    
+    # Add glossary overhead (20% if enabled)
+    if use_glossary:
+        glossary_overhead = math.ceil((input_tokens + output_tokens) * 0.20)
+        input_tokens += glossary_overhead
+    
+    input_cost = (input_tokens / 1000) * input_cost_per_1k
+    output_cost = (output_tokens / 1000) * output_cost_per_1k
+    estimated_cost = input_cost + output_cost
+```
+
+<Info>
+  Cost estimates include overhead for system prompts (3%) and glossary terms (20% if enabled). Context-aware algorithm adds 4x input token overhead.
+</Info>
+
+## Document Token Estimation
+
+Tinbox uses different estimation methods for each file type:
+
+From `cost.py:40-78`:
+
+```python
+def estimate_document_tokens(file_path: Path) -> int:
+    """Estimate the number of tokens in a document."""
+    file_type = FileType(file_path.suffix.lstrip(".").lower())
+    
+    if file_type == FileType.PDF:
+        # Rough estimate: 500 tokens per page
+        import pypdf
+        with open(file_path, "rb") as f:
+            pdf = pypdf.PdfReader(f)
+            return len(pdf.pages) * 500
+    
+    elif file_type == FileType.DOCX:
+        # Rough estimate: 1.3 tokens per word, rounded up
+        from docx import Document
+        doc = Document(file_path)
+        word_count = sum(len(p.text.split()) for p in doc.paragraphs)
+        return int(word_count * 1.3 + 0.999)
+    
+    else:  # TXT
+        # Rough estimate: 1 token per 4 characters, rounded up
+        text = file_path.read_text()
+        return -(-len(text) // 4)  # Ceiling division
+```
+
+### Estimation Rules
+
+- **PDF**: 500 tokens per page (vision models process images)
+- **DOCX**: 1.3 tokens per word (accounts for punctuation)
+- **TXT**: 1 token per 4 characters (standard tokenization ratio)
+
+<Note>
+  These are rough estimates. Actual token usage may vary by ±20% depending on language, formatting, and model tokenizer.
+</Note>
+
+## Model Costs
+
+Pricing is based on September 2025 rates:
+
+From `cost.py:21-37`:
+
+```python
+MODEL_COSTS: dict[ModelType, tuple[float, float]] = {
+    ModelType.OPENAI: (
+        0.00125,  # $0.00125 per 1K input tokens
+        0.01,     # $0.01 per 1K output tokens (GPT-5)
+    ),
+    ModelType.ANTHROPIC: (
+        0.003,    # $0.003 per 1K input tokens
+        0.015,    # $0.015 per 1K output tokens (Sonnet 4)
+    ),
+    ModelType.GEMINI: (
+        0.00125,  # $0.00125 per 1K input tokens
+        0.01,     # $0.01 per 1K output tokens (Gemini 2.5 Pro)
+    ),
+    ModelType.OLLAMA: (0.0, 0.0),  # Free for local models
+}
+```
+
+<Tip>
+  Prices are for standard models. Extended thinking (reasoning) models cost significantly more. See [Model Providers](/concepts/model-providers) for details.
+</Tip>
+
+## Cost Levels
+
+Costs are classified into four levels:
+
+From `cost.py:12-18` and `cost.py:81-97`:
+
+```python
+class CostLevel(str, Enum):
+    LOW = "low"          # < $1
+    MEDIUM = "medium"    # $1-$5
+    HIGH = "high"        # $5-$20
+    VERY_HIGH = "very_high"  # > $20
+
+def get_cost_level(cost: float) -> CostLevel:
+    if cost < 1.0:
+        return CostLevel.LOW
+    elif cost < 5.0:
+        return CostLevel.MEDIUM
+    elif cost < 20.0:
+        return CostLevel.HIGH
+    else:
+        return CostLevel.VERY_HIGH
+```
+
+## Context-Aware Algorithm Overhead
+
+The context-aware algorithm uses significantly more input tokens due to context sharing:
+
+From `cost.py:125-142`:
+
+```python
+def estimate_context_aware_tokens(
+    estimated_tokens: int, 
+    context_multiplier: float = 4
+) -> int:
+    """Estimate input tokens for context-aware translation.
+    
+    Context-aware algorithm uses more input tokens due to:
+    - Previous chunk context
+    - Previous translation context
+    - Translation instructions
+    """
+    return math.ceil(estimated_tokens * context_multiplier)
+```
+
+<Warning>
+  Context-aware algorithm increases input tokens by 4x. This improves quality but significantly increases cost. Always check the estimate before proceeding.
+</Warning>
+
+## Cost Warnings
+
+Tinbox generates warnings for cost-related issues:
+
+From `cost.py:203-236`:
+
+```python
+warnings = []
+
+if model != ModelType.OLLAMA:
+    # Large document warning
+    if estimated_total_tokens > 50000:
+        warnings.append(
+            f"Large document detected ({estimated_total_tokens:,} tokens). "
+            "Consider using Ollama for no cost."
+        )
+    
+    # Context-aware overhead warning
+    if algorithm == "context-aware":
+        context_overhead = input_tokens - estimated_tokens
+        warnings.append(
+            f"Context-aware algorithm uses additional input tokens for context "
+            f"(+{context_overhead:,} tokens, ~{context_overhead * 100 // estimated_tokens}% overhead). "
+            f"This improves translation quality but increases cost."
+        )
+    
+    # Glossary overhead warning
+    if use_glossary:
+        warnings.append(
+            f"Glossary enabled adds input token overhead (~20% of total tokens)."
+        )
+    
+    # Max cost exceeded warning
+    if max_cost and estimated_cost > max_cost:
+        warnings.append(
+            f"Estimated cost (${estimated_cost:.2f}) exceeds maximum "
+            f"threshold (${max_cost:.2f})"
+        )
+
+# Reasoning effort warning (applies to all models)
+if reasoning_effort != "minimal":
+    warnings.append(
+        f"Reasoning effort is '{reasoning_effort}', which means cost and time estimations are unreliable and will be much higher. "
+        f"Make sure to set a --max-cost and keep an eye on the live cost and time predictions in the progress bar."
+    )
+```
+
+## Cost Estimate Object
+
+From `cost.py:100-122`:
+
+```python
+class CostEstimate:
+    """Cost estimate for a translation task."""
+    
+    def __init__(
+        self,
+        estimated_tokens: int,
+        estimated_cost: float,
+        estimated_time: float,
+        warnings: list[str],
+    ) -> None:
+        self.estimated_tokens = estimated_tokens
+        self.estimated_cost = estimated_cost
+        self.estimated_time = estimated_time
+        self.warnings = warnings
+        self.cost_level = get_cost_level(estimated_cost)
+```
+
+## Real-Time Cost Tracking
+
+During translation, Tinbox tracks actual costs in real-time:
+
+```python
+from tinbox.core.translation.interface import TranslationResponse
+
+response = await translator.translate(request)
+print(f"Tokens used: {response.tokens_used}")
+print(f"Cost: ${response.cost:.4f}")
+print(f"Time taken: {response.time_taken:.2f}s")
+```
+
+### CLI Progress Display
+
+The CLI shows live cost updates:
+
+```
+Translating pages... ━━━━━━━━━━━━━━━━━━━━ 15/20 75% $2.34
+```
+
+<Info>
+  The progress bar updates after each page/chunk with cumulative cost and tokens used.
+</Info>
+
+## Maximum Cost Protection
+
+Set a maximum cost threshold to prevent runaway expenses:
+
+```bash
+tinbox translate --to de --max-cost 10.00 document.pdf
+```
+
+From the translation algorithms:
+
+```python
+if config.max_cost and total_cost > config.max_cost:
+    raise TranslationError(
+        f"Translation cost of {total_cost:.2f} exceeded maximum cost of {config.max_cost:.2f}"
+    )
+```
+
+<Warning>
+  Translation stops immediately when max cost is exceeded. Use checkpoints to resume later with adjusted limits.
+</Warning>
+
+## Time Estimation
+
+Tinbox estimates translation time based on model type:
+
+From `cost.py:198-200`:
+
+```python
+# Assume 30 tokens/second for cloud models, 20 tokens/second for local
+tokens_per_second = 20 if model == ModelType.OLLAMA else 30
+estimated_time = output_tokens / tokens_per_second
+```
+
+### Typical Translation Times
+
+- **Cloud models** (OpenAI, Anthropic, Google): ~30 tokens/second
+- **Local models** (Ollama): ~20 tokens/second (varies by hardware)
+- **Reasoning models**: Highly variable, 10-100x slower
+
+<Note>
+  Time estimates are rough approximations. Actual time depends on network latency, model load, reasoning effort, and document complexity.
+</Note>
+
+## Cost Optimization Tips
+
+<AccordionGroup>
+  <Accordion title="Choose the right algorithm">
+    - Use **page-by-page** for PDFs to minimize overhead
+    - Use **sliding-window** for continuous text when you need consistency
+    - Use **context-aware** only when quality is critical (4x input cost)
+  </Accordion>
+  
+  <Accordion title="Disable glossary for simple translations">
+    - Glossary adds 20% overhead to both input and output tokens
+    - Only enable with `--use-glossary` when consistent terminology is critical
+  </Accordion>
+  
+  <Accordion title="Use Ollama for large documents">
+    - Free local translation with acceptable quality
+    - No API costs, complete privacy
+    - Install: `ollama pull llama3:8b`
+  </Accordion>
+  
+  <Accordion title="Avoid high reasoning effort">
+    - Standard translation (minimal) is usually sufficient
+    - Medium/high reasoning can increase costs 10-20x
+    - Always set `--max-cost` with reasoning models
+  </Accordion>
+  
+  <Accordion title="Use checkpoints for long documents">
+    - Resume interrupted translations without re-processing
+    - Save costs if you need to stop and restart
+    - Enable with `--checkpoint-dir ./checkpoints`
+  </Accordion>
+</AccordionGroup>
+
+## Example Estimates
+
+### 10-page PDF (English to German)
+
+```bash
+tinbox translate --to de --model openai document.pdf
+
+# Estimated tokens: ~5,000 (500 per page)
+# Input cost: $0.00625 (5K × $0.00125)
+# Output cost: $0.05 (5K × $0.01)
+# Total: ~$0.056
+# Cost level: LOW
+```
+
+### 50-page PDF with Context-Aware
+
+```bash
+tinbox translate --to de --model openai --algorithm context-aware document.pdf
+
+# Estimated tokens: ~25,000 base (500 per page)
+# Input tokens: ~100,000 (4x context overhead)
+# Input cost: $0.125 (100K × $0.00125)
+# Output cost: $0.25 (25K × $0.01)
+# Total: ~$0.375
+# Cost level: LOW
+```
+
+### Large Novel (200 pages, Claude with Glossary)
+
+```bash
+tinbox translate --to ja --model anthropic --use-glossary novel.docx
+
+# Estimated tokens: ~100,000 base
+# With glossary: ~120,000 total
+# Input cost: $0.36 (120K × $0.003)
+# Output cost: $1.80 (120K × $0.015)
+# Total: ~$2.16
+# Cost level: MEDIUM
+```
+
+### Technical Manual with High Reasoning
+
+```bash
+tinbox translate --to es --model openai --reasoning-effort high \
+  --max-cost 50.00 manual.pdf
+
+# Warning: Cost estimation unreliable with high reasoning
+# Actual cost may be 10-20x higher than estimate
+# Always set --max-cost with reasoning models!
+```
+
+<Warning>
+  Reasoning effort makes cost estimates unreliable. Always monitor the real-time progress bar and set a safety limit with `--max-cost`.
+</Warning>
+
+## Force Translation
+
+Skip cost warnings and proceed automatically:
+
+```bash
+tinbox translate --to de --force document.pdf
+```
+
+From `types.py:60-63`:
+
+```python
+force: bool = Field(
+    default=False,
+    description="Whether to skip cost and size warnings",
+)
+```
+
+<Warning>
+  Using `--force` bypasses all cost warnings. Only use when you're confident about the estimated cost.
+</Warning>

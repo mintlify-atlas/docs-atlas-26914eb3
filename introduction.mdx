@@ -1,0 +1,140 @@
+---
+title: "Introduction to Tinbox"
+description: "Your ultimate translation tool for large documents using LLMs - no OCR needed"
+---
+
+<img
+  className="block dark:hidden"
+  src="/images/hero-light.svg"
+  alt="Tinbox Hero Light"
+/>
+<img
+  className="hidden dark:block"
+  src="/images/hero-dark.svg"
+  alt="Tinbox Hero Dark"
+/>
+
+## Welcome to Tinbox
+
+Tinbox is a robust command-line tool designed to tackle the challenges of translating large documents using Large Language Models (LLMs). Unlike other tools, Tinbox excels in handling extensive document sizes and navigates around model limitations related to size and copyright issues, ensuring seamless and efficient translations.
+
+## Why Tinbox?
+
+Tinbox solves critical problems that make document translation challenging:
+
+<CardGroup cols={2}>
+  <Card title="No OCR Needed" icon="eye">
+    Directly translates PDFs using vision-capable multimodal models (GPT-4o, Claude Sonnet, Gemini Pro) without requiring OCR that leads to formatting loss and errors.
+  </Card>
+  
+  <Card title="Large Document Handling" icon="file">
+    Efficiently processes large PDFs and documents that would typically fail or timeout with traditional translation tools.
+  </Card>
+  
+  <Card title="Overcomes Model Limitations" icon="circle-check">
+    Bypasses common model refusals due to copyright concerns, document size limitations, and rate limiting through intelligent algorithms.
+  </Card>
+  
+  <Card title="Quality & Consistency" icon="star">
+    Smart algorithms ensure consistent translations across document sections while maintaining context and terminology through glossary support.
+  </Card>
+</CardGroup>
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Smart Document Handling" icon="file-lines">
+    Supports PDFs, Word documents (DOCX), and text files with intelligent processing for each format.
+  </Card>
+  
+  <Card title="Intelligent Algorithms" icon="brain">
+    - **Page-by-Page**: Best for PDF documents
+    - **Context-Aware**: Default for text with smart splitting
+    - **Sliding Window**: For sequential long documents
+  </Card>
+  
+  <Card title="Flexible Model Support" icon="robot">
+    Works with OpenAI (GPT-4o, GPT-5), Anthropic (Claude), Google (Gemini), or local Ollama models.
+  </Card>
+  
+  <Card title="Glossary Support" icon="book">
+    Maintains consistent terminology across documents with automatic term detection and custom glossaries.
+  </Card>
+  
+  <Card title="Checkpoint & Resume" icon="floppy-disk">
+    Handle large documents with automatic progress saving and the ability to resume interrupted translations.
+  </Card>
+  
+  <Card title="Cost Tracking" icon="chart-line">
+    Estimate translation costs and time before starting, with full progress and cost tracking during translation.
+  </Card>
+</CardGroup>
+
+## How It Works
+
+<Steps>
+  <Step title="Load Your Document">
+    Tinbox automatically detects your document type (PDF, DOCX, or TXT) and uses the appropriate processor.
+  </Step>
+  
+  <Step title="Smart Processing">
+    Documents are intelligently split using context-aware algorithms that maintain meaning across chunks.
+  </Step>
+  
+  <Step title="LLM Translation">
+    Each chunk is translated using your chosen LLM provider while maintaining consistency through glossaries and context.
+  </Step>
+  
+  <Step title="Quality Output">
+    Receive your translated document with preserved formatting and consistent terminology throughout.
+  </Step>
+</Steps>
+
+## Use Cases
+
+<AccordionGroup>
+  <Accordion title="Technical Documentation" icon="code">
+    Translate technical manuals, API documentation, and software guides while maintaining consistent terminology with glossary support.
+  </Accordion>
+  
+  <Accordion title="Academic Papers" icon="graduation-cap">
+    Process research papers and academic documents with context-aware translation that preserves meaning across sections.
+  </Accordion>
+  
+  <Accordion title="Legal Documents" icon="scale-balanced">
+    Translate contracts and legal documents with high accuracy using premium models and glossary enforcement.
+  </Accordion>
+  
+  <Accordion title="Business Reports" icon="briefcase">
+    Convert business presentations, reports, and proposals while maintaining professional formatting and terminology.
+  </Accordion>
+</AccordionGroup>
+
+## Quick Example
+
+```bash
+# Translate a text document to German
+tinbox translate --to de --model openai:gpt-5-2025-08-07 document.txt
+
+# Translate a PDF to Spanish (requires vision-capable model)
+tinbox translate --to es --algorithm page --model openai:gpt-4o document.pdf
+
+# Use local models with Ollama
+tinbox translate --to fr --model ollama:llama3.1:8b document.txt
+```
+
+<Tip>
+  Ready to get started? Head over to the [Installation](/installation) guide to set up Tinbox, or jump straight to the [Quick Start](/quickstart) to see it in action.
+</Tip>
+
+## Community & Support
+
+Tinbox is an open-source project. If you encounter issues or have questions:
+
+- **Report issues**: Open an issue on our GitHub repository
+- **Get help**: Check the troubleshooting section in our docs
+- **Contribute**: We welcome contributions and improvements
+
+<Note>
+  Tinbox requires Python 3.12 or higher and works best with vision-capable models for PDF translation.
+</Note>

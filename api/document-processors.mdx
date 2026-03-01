@@ -1,0 +1,384 @@
+---
+title: Document Processors
+description: Document loading and processing utilities for different file formats
+---
+
+Tinbox provides a flexible document processing system that handles PDF, DOCX, and TXT files. The system automatically selects the appropriate processor based on file extension.
+
+## DocumentContent
+
+Represents a document that has been loaded and is ready for translation.
+
+```python
+from tinbox import load_document
+from pathlib import Path
+
+content = await load_document(Path("document.pdf"))
+
+print(f"Content type: {content.content_type}")
+print(f"Number of pages: {len(content.pages)}")
+print(f"Metadata: {content.metadata}")
+
+# Access individual pages
+for i, page in enumerate(content.pages, 1):
+    if isinstance(page, bytes):
+        print(f"Page {i} is an image ({len(page)} bytes)")
+    else:
+        print(f"Page {i} is text ({len(page)} chars)")
+```
+
+<ParamField path="pages" type="list[str | bytes]" required>
+  Individual pages of the document ready for translation.
+  - Text-based content (TXT, text-based PDFs, DOCX): Contains strings
+  - Image-based content (scanned PDFs): Contains PNG image bytes
+  
+  Cannot be empty (validated automatically).
+</ParamField>
+
+<ParamField path="content_type" type="str" required>
+  MIME type of the content. Must match pattern `^(text|image)/.+$`.
+  - `"text/plain"` - Text content
+  - `"image/png"` - Image content (scanned PDFs)
+</ParamField>
+
+<ParamField path="metadata" type="dict[str, Any]" default="{}">
+  Document metadata including:
+  - `file_type`: The detected file type (`FileType` enum)
+  - `total_pages`: Total number of pages
+  - `title`: Document title (if available)
+  - `author`: Document author (if available)
+  - `creation_date`: Creation date string (if available)
+  - `modification_date`: Last modification date (if available)
+</ParamField>
+
+<Expandable title="Validation">
+  <ResponseField name="pages">
+    Automatically validated to ensure the list is not empty. Raises `ValueError` if pages list is empty.
+  </ResponseField>
+  
+  <ResponseField name="content_type">
+    Must match the pattern `^(text|image)/.+$`. Common values are `"text/plain"` and `"image/png"`.
+  </ResponseField>
+</Expandable>
+
+<Note>
+  `DocumentContent` is immutable (`frozen=True`). Once created, its fields cannot be modified.
+</Note>
+
+---
+
+## DocumentMetadata
+
+Metadata about a processed document.
+
+```python
+from tinbox.core.processor import get_processor_for_file_type
+from tinbox.core.types import FileType
+from pathlib import Path
+
+# Get processor and extract metadata
+processor = get_processor_for_file_type(FileType.PDF)
+metadata = await processor.get_metadata(Path("document.pdf"))
+
+print(f"File type: {metadata.file_type}")
+print(f"Total pages: {metadata.total_pages}")
+print(f"Title: {metadata.title}")
+print(f"Author: {metadata.author}")
+```
+
+<ParamField path="file_type" type="FileType" required>
+  The type of file. One of:
+  - `FileType.PDF` - PDF documents
+  - `FileType.DOCX` - Word documents
+  - `FileType.TXT` - Plain text files
+</ParamField>
+
+<ParamField path="total_pages" type="int" required>
+  Total number of pages in the document. Must be >= 1.
+</ParamField>
+
+<ParamField path="title" type="str | None" default="None">
+  Document title extracted from metadata, if available.
+</ParamField>
+
+<ParamField path="author" type="str | None" default="None">
+  Document author extracted from metadata, if available.
+</ParamField>
+
+<ParamField path="creation_date" type="str | None" default="None">
+  Document creation date as string, if available.
+</ParamField>
+
+<ParamField path="modification_date" type="str | None" default="None">
+  Last modification date as string, if available.
+</ParamField>
+
+<ParamField path="custom_metadata" type="dict[str, Any]" default="{}">
+  Additional processor-specific metadata.
+</ParamField>
+
+---
+
+## Processor Functions
+
+### get_processor_for_file_type
+
+Get the appropriate document processor for a specific file type.
+
+```python
+from tinbox.core.processor import get_processor_for_file_type
+from tinbox.core.types import FileType
+
+# Get PDF processor with custom settings
+pdf_processor = get_processor_for_file_type(
+    FileType.PDF,
+    settings={"dpi": 300}  # Higher resolution for scanned PDFs
+)
+
+# Get DOCX processor
+docx_processor = get_processor_for_file_type(FileType.DOCX)
+
+# Get text processor
+txt_processor = get_processor_for_file_type(FileType.TXT)
+```
+
+<ParamField path="file_type" type="FileType" required>
+  The file type to get a processor for. Must be one of:
+  - `FileType.PDF`
+  - `FileType.DOCX`
+  - `FileType.TXT`
+</ParamField>
+
+<ParamField path="settings" type="dict[str, Any] | None" default="None">
+  Optional processor-specific settings.
+  
+  For PDF processors:
+  - `dpi`: Resolution for rendering PDF pages to images (default: 200)
+  
+  ```python
+  processor = get_processor_for_file_type(
+      FileType.PDF,
+      settings={"dpi": 300}
+  )
+  ```
+</ParamField>
+
+<ResponseField name="return" type="DocumentProcessor">
+  An instance implementing the `DocumentProcessor` protocol:
+  - `PdfProcessor` for PDFs
+  - `DocxProcessor` for DOCX files
+  - `TextProcessor` for TXT files
+</ResponseField>
+
+<Expandable title="Raises">
+  <ResponseField name="ProcessingError">
+    Raised if no processor is available for the specified file type.
+  </ResponseField>
+</Expandable>
+
+---
+
+### load_document
+
+High-level function to load any supported document format.
+
+```python
+from tinbox import load_document
+from pathlib import Path
+
+# Load with default settings
+content = await load_document(Path("document.pdf"))
+
+# Load PDF with custom DPI
+content = await load_document(
+    Path("scanned.pdf"),
+    processor_settings={"dpi": 300}
+)
+
+# Load DOCX
+content = await load_document(Path("document.docx"))
+
+# Load TXT
+content = await load_document(Path("document.txt"))
+```
+
+<ParamField path="file_path" type="Path" required>
+  Path to the document to load. File type is automatically detected from extension.
+  
+  Supported extensions:
+  - `.pdf` - PDF documents
+  - `.docx` - Microsoft Word documents
+  - `.txt` - Plain text files
+</ParamField>
+
+<ParamField path="processor_settings" type="dict[str, Any] | None" default="None">
+  Optional settings to pass to the document processor.
+  
+  For PDF files, you can specify rendering settings:
+  ```python
+  content = await load_document(
+      Path("document.pdf"),
+      processor_settings={"dpi": 300}
+  )
+  ```
+</ParamField>
+
+<ResponseField name="return" type="DocumentContent">
+  A `DocumentContent` instance containing:
+  - `pages`: List of page contents (strings for text, bytes for images)
+  - `content_type`: MIME type (`"text/plain"` or `"image/png"`)
+  - `metadata`: Document metadata including file type, page count, title, author, etc.
+</ResponseField>
+
+<Expandable title="Raises">
+  <ResponseField name="ProcessingError">
+    Raised if:
+    - File doesn't exist
+    - File extension is not supported
+    - Document is corrupted or cannot be read
+    - Processor encounters an error during extraction
+  </ResponseField>
+</Expandable>
+
+---
+
+## DocumentProcessor Protocol
+
+The `DocumentProcessor` protocol defines the interface that all document processors must implement.
+
+```python
+from typing import Protocol
+from pathlib import Path
+from collections.abc import AsyncIterator
+
+class DocumentProcessor(Protocol):
+    @property
+    def supported_types(self) -> set[FileType]:
+        """Get the file types supported by this processor."""
+        ...
+
+    async def get_metadata(self, file_path: Path) -> DocumentMetadata:
+        """Extract metadata from a document."""
+        ...
+
+    async def extract_content(
+        self,
+        file_path: Path,
+        *,
+        start_page: int = 1,
+        end_page: int | None = None
+    ) -> AsyncIterator[str | bytes]:
+        """Extract content from a document."""
+        ...
+```
+
+### supported_types
+
+<ResponseField name="return" type="set[FileType]">
+  Set of file types this processor can handle.
+</ResponseField>
+
+### get_metadata
+
+<ParamField path="file_path" type="Path" required>
+  Path to the document.
+</ParamField>
+
+<ResponseField name="return" type="DocumentMetadata">
+  Extracted document metadata.
+</ResponseField>
+
+### extract_content
+
+<ParamField path="file_path" type="Path" required>
+  Path to the document.
+</ParamField>
+
+<ParamField path="start_page" type="int" default="1">
+  First page to extract (1-indexed).
+</ParamField>
+
+<ParamField path="end_page" type="int | None" default="None">
+  Last page to extract (inclusive), or `None` to extract all remaining pages.
+</ParamField>
+
+<ResponseField name="return" type="AsyncIterator[str | bytes]">
+  Async iterator yielding page contents. Text pages yield strings, image pages yield PNG bytes.
+</ResponseField>
+
+---
+
+## ProcessingError
+
+Exception raised when document processing fails.
+
+```python
+from tinbox.core.processor import ProcessingError, load_document
+from pathlib import Path
+
+try:
+    content = await load_document(Path("nonexistent.pdf"))
+except ProcessingError as e:
+    print(f"Failed to process document: {e}")
+```
+
+Common causes:
+- File not found
+- Unsupported file type
+- Corrupted or invalid document
+- Missing dependencies (e.g., poppler for PDFs)
+- Insufficient permissions
+
+## Examples
+
+### Loading Different File Types
+
+```python
+from tinbox import load_document
+from pathlib import Path
+
+# Load PDF (text-based)
+pdf_content = await load_document(Path("report.pdf"))
+print(f"PDF has {len(pdf_content.pages)} pages")
+
+# Load scanned PDF with high resolution
+scanned_content = await load_document(
+    Path("scanned.pdf"),
+    processor_settings={"dpi": 300}
+)
+# Pages will be image bytes
+if isinstance(scanned_content.pages[0], bytes):
+    print("This is a scanned PDF")
+
+# Load Word document
+docx_content = await load_document(Path("document.docx"))
+
+# Load text file
+txt_content = await load_document(Path("notes.txt"))
+```
+
+### Custom Processor Usage
+
+```python
+from tinbox.core.processor import get_processor_for_file_type
+from tinbox.core.types import FileType
+from pathlib import Path
+
+# Get processor
+processor = get_processor_for_file_type(FileType.PDF)
+
+# Extract metadata
+metadata = await processor.get_metadata(Path("document.pdf"))
+print(f"Document has {metadata.total_pages} pages")
+
+# Extract specific page range
+pages = []
+async for page in processor.extract_content(
+    Path("document.pdf"),
+    start_page=1,
+    end_page=5
+):
+    pages.append(page)
+
+print(f"Extracted {len(pages)} pages")
+```

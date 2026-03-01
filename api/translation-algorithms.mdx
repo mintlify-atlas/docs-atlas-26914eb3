@@ -1,0 +1,528 @@
+---
+title: Translation Algorithms
+description: Translation interfaces, request/response types, and algorithm implementations
+---
+
+Tinbox provides a flexible translation system with multiple algorithms for different use cases. The system uses a protocol-based interface for translator implementations.
+
+## ModelInterface
+
+Protocol defining the interface for LLM translation models.
+
+```python
+from typing import Protocol
+from tinbox.core.translation import ModelInterface, TranslationRequest, TranslationResponse
+
+class ModelInterface(Protocol):
+    async def translate(
+        self,
+        request: TranslationRequest,
+    ) -> TranslationResponse:
+        """Translate content using the model."""
+        ...
+
+    async def validate_model(self) -> bool:
+        """Check if the model is available and properly configured."""
+        ...
+```
+
+### translate
+
+Translate content according to a translation request.
+
+<ParamField path="request" type="TranslationRequest" required>
+  Translation request containing source/target languages, content, and configuration.
+</ParamField>
+
+<ResponseField name="return" type="TranslationResponse">
+  Translation response with translated text, token usage, cost, and timing information.
+</ResponseField>
+
+<Expandable title="Raises">
+  <ResponseField name="TranslationError">
+    Raised if translation fails due to API errors, network issues, or invalid configuration.
+  </ResponseField>
+</Expandable>
+
+### validate_model
+
+Validate that the model is properly configured and accessible.
+
+<ResponseField name="return" type="bool">
+  `True` if the model is available and can be used for translation.
+</ResponseField>
+
+---
+
+## TranslationRequest
+
+Configuration for a single translation request.
+
+```python
+from tinbox.core.translation import TranslationRequest
+from tinbox.core.types import ModelType
+
+# Basic text translation
+request = TranslationRequest(
+    source_lang="en",
+    target_lang="fr",
+    content="Hello, world!",
+    content_type="text/plain",
+    model=ModelType.OPENAI,
+    model_params={"model_name": "gpt-4o"},
+)
+
+# Translation with context
+request = TranslationRequest(
+    source_lang="en",
+    target_lang="de",
+    content="He said it was great.",
+    context="[PREVIOUS_CHUNK]\nThe restaurant opened yesterday.\n[/PREVIOUS_CHUNK]",
+    content_type="text/plain",
+    model=ModelType.ANTHROPIC,
+    model_params={"model_name": "claude-3-sonnet"},
+)
+
+# Translation with glossary and reasoning
+from tinbox.core.types import Glossary, GlossaryEntry
+
+glossary = Glossary(entries={"API": "API", "cloud": "Cloud"})
+
+request = TranslationRequest(
+    source_lang="en",
+    target_lang="ja",
+    content="The API connects to the cloud.",
+    content_type="text/plain",
+    model=ModelType.GEMINI,
+    model_params={"model_name": "gemini-2.5-pro"},
+    glossary=glossary,
+    reasoning_effort="high",
+)
+```
+
+<ParamField path="source_lang" type="str" required>
+  Source language code (e.g., `"en"`, `"fr"`, `"ja"`).
+</ParamField>
+
+<ParamField path="target_lang" type="str" required>
+  Target language code (e.g., `"de"`, `"es"`, `"zh"`).
+</ParamField>
+
+<ParamField path="content" type="str | bytes" required>
+  Content to translate:
+  - `str` for text content
+  - `bytes` for image content (PNG format for scanned documents)
+</ParamField>
+
+<ParamField path="content_type" type="str" required>
+  MIME type of the content. Must match pattern `^(text|image)/.+$`.
+  - `"text/plain"` - Plain text content
+  - `"image/png"` - Image content (scanned PDFs)
+</ParamField>
+
+<ParamField path="model" type="ModelType" required>
+  Model provider to use. Options:
+  - `ModelType.OPENAI` - OpenAI models
+  - `ModelType.ANTHROPIC` - Anthropic Claude models
+  - `ModelType.GEMINI` - Google Gemini models
+  - `ModelType.OLLAMA` - Local Ollama models
+</ParamField>
+
+<ParamField path="context" type="str | None" default="None">
+  Optional context information to improve translation quality and consistency.
+  
+  Context-aware algorithm provides:
+  - `[PREVIOUS_CHUNK]` tags with previous content
+  - `[PREVIOUS_CHUNK_TRANSLATION]` tags with previous translation
+  - `[NEXT_CHUNK]` tags with upcoming content
+  
+  ```python
+  context = """[PREVIOUS_CHUNK]
+The meeting started at 9 AM.
+[/PREVIOUS_CHUNK]
+
+[PREVIOUS_CHUNK_TRANSLATION]
+Die Besprechung begann um 9 Uhr.
+[/PREVIOUS_CHUNK_TRANSLATION]
+
+Use this context to maintain consistency in terminology and style."""
+  ```
+</ParamField>
+
+<ParamField path="model_params" type="dict" default="{}">
+  Additional model-specific parameters. Common parameters:
+  - `model_name`: Specific model to use (e.g., `"gpt-4o"`, `"claude-3-sonnet"`)
+  - `temperature`: Sampling temperature (if supported)
+  - `max_tokens`: Maximum output tokens (if supported)
+</ParamField>
+
+<ParamField path="glossary" type="Glossary | None" default="None">
+  Optional glossary for consistent term translations. The model will use these terms when translating.
+  
+  ```python
+  from tinbox.core.types import Glossary
+  
+  glossary = Glossary(entries={
+      "API": "API",
+      "cloud computing": "Cloud-Computing",
+      "database": "Datenbank",
+  })
+  ```
+</ParamField>
+
+<ParamField path="reasoning_effort" type="Literal['minimal', 'low', 'medium', 'high']" default="minimal">
+  Model reasoning effort level:
+  - `"minimal"` - Fast, cost-effective
+  - `"low"` - Slight improvement, moderate cost increase
+  - `"medium"` - Better quality, higher cost
+  - `"high"` - Best quality, significantly higher cost
+  
+  <Warning>
+    Higher reasoning efforts can multiply costs by 3-10x.
+  </Warning>
+</ParamField>
+
+<Note>
+  `TranslationRequest` is immutable (`frozen=True`).
+</Note>
+
+---
+
+## TranslationResponse
+
+Response from a translation request or algorithm.
+
+```python
+from tinbox import translate_document, load_document, create_translator, TranslationConfig
+from pathlib import Path
+
+content = await load_document(Path("document.pdf"))
+config = TranslationConfig(...)
+translator = create_translator(config)
+
+response = await translate_document(content, config, translator)
+
+print(f"Translated text: {response.text[:100]}...")
+print(f"Tokens used: {response.tokens_used:,}")
+print(f"Cost: ${response.cost:.4f}")
+print(f"Time taken: {response.time_taken:.2f}s")
+
+if response.failed_pages:
+    print(f"Failed pages: {response.failed_pages}")
+    for page, error in response.page_errors.items():
+        print(f"  Page {page}: {error}")
+
+if response.warnings:
+    for warning in response.warnings:
+        print(f"Warning: {warning}")
+
+if response.glossary_updates:
+    print(f"New glossary entries: {len(response.glossary_updates)}")
+    for entry in response.glossary_updates:
+        print(f"  {entry.term} -> {entry.translation}")
+```
+
+<ResponseField name="text" type="str" required>
+  The translated text. For page-by-page algorithm with failed pages, contains placeholders:
+  
+  ```
+  [TRANSLATION_FAILED: Page 3]
+  Reason: API timeout
+  [/TRANSLATION_FAILED]
+  ```
+</ResponseField>
+
+<ResponseField name="tokens_used" type="int" required>
+  Total number of tokens used (input + output). Must be >= 0.
+</ResponseField>
+
+<ResponseField name="cost" type="float" required>
+  Total cost in USD. Must be >= 0.0.
+</ResponseField>
+
+<ResponseField name="time_taken" type="float" required>
+  Time taken in seconds. Must be >= 0.0.
+</ResponseField>
+
+<ResponseField name="glossary_updates" type="list[GlossaryEntry]" default="[]">
+  New glossary entries discovered during translation (when glossary is enabled).
+  
+  Each entry contains:
+  - `term`: Term in source language
+  - `translation`: Translation in target language
+</ResponseField>
+
+<ResponseField name="failed_pages" type="list[int]" default="[]">
+  List of page numbers that failed to translate (page-by-page algorithm only).
+  
+  Page numbers are 1-indexed.
+</ResponseField>
+
+<ResponseField name="page_errors" type="dict[int, str]" default="{}">
+  Mapping from page number to error message for failed pages.
+  
+  ```python
+  if response.page_errors:
+      for page, error in response.page_errors.items():
+          print(f"Page {page} failed: {error}")
+  ```
+</ResponseField>
+
+<ResponseField name="warnings" type="list[str]" default="[]">
+  Non-fatal warnings during translation.
+  
+  Common warnings:
+  - Incomplete translation due to failed pages
+  - Cost approaching threshold
+  - Algorithm-specific issues
+</ResponseField>
+
+<Note>
+  `TranslationResponse` is immutable (`frozen=True`).
+</Note>
+
+---
+
+## Translation Algorithms
+
+Tinbox provides three translation algorithms, each optimized for different scenarios.
+
+### Page-by-Page
+
+Translates each page independently without context.
+
+```python
+config = TranslationConfig(
+    ...,
+    algorithm="page",
+)
+```
+
+**Characteristics:**
+- Fastest algorithm
+- No context between pages
+- Good for documents with independent sections
+- Best for simple documents or when speed is priority
+- Supports resume from checkpoint
+- Can continue despite individual page failures
+
+**Best for:**
+- Simple documents
+- Presentations with independent slides
+- Documents where each page is self-contained
+- Quick translations where context isn't critical
+
+### Sliding Window
+
+Processes text using overlapping windows for continuity.
+
+```python
+config = TranslationConfig(
+    ...,
+    algorithm="sliding-window",
+    window_size=3000,  # Characters per window
+    overlap_size=300,  # Overlap between windows
+)
+```
+
+**Characteristics:**
+- Good balance between speed and quality
+- Overlapping windows maintain some continuity
+- Not suitable for image content (text only)
+- Windows are merged intelligently after translation
+- Supports resume from checkpoint
+
+**Best for:**
+- Long text documents
+- Content requiring some continuity
+- When context-aware overhead is too high
+- Technical documentation with cross-references
+
+**Configuration:**
+- `window_size`: Size of each window (default: 2000 characters)
+- `overlap_size`: Overlap between windows (default: 200 characters)
+
+### Context-Aware
+
+Splits text at natural boundaries with full context from adjacent chunks.
+
+```python
+config = TranslationConfig(
+    ...,
+    algorithm="context-aware",
+    context_size=2500,  # Target chunk size
+)
+
+# Or with custom split token
+config = TranslationConfig(
+    ...,
+    algorithm="context-aware",
+    custom_split_token="\n---\n",  # Split on horizontal rules
+)
+```
+
+**Characteristics:**
+- Highest quality translations
+- Splits text at natural boundaries (paragraphs, sentences, etc.)
+- Provides previous/next chunk context for each translation
+- Higher input token usage (3-4x multiplier due to context)
+- Not suitable for image content (text only)
+- Supports resume from checkpoint
+
+**Best for:**
+- Literary works and books
+- Content requiring high consistency
+- Documents with narrative flow
+- Technical manuals with interconnected sections
+
+**Configuration:**
+- `context_size`: Target chunk size in characters (default: 2000)
+- `custom_split_token`: Custom token to split on, ignoring `context_size`
+
+**Context Format:**
+
+The algorithm provides context in tagged format:
+
+```
+[PREVIOUS_CHUNK]
+The previous section's content...
+[/PREVIOUS_CHUNK]
+
+[PREVIOUS_CHUNK_TRANSLATION]
+Die Übersetzung des vorherigen Abschnitts...
+[/PREVIOUS_CHUNK_TRANSLATION]
+
+[NEXT_CHUNK]
+The next section's content...
+[/NEXT_CHUNK]
+
+Use this context to maintain consistency in terminology and style.
+```
+
+---
+
+## TranslationError
+
+Exception raised when translation fails.
+
+```python
+from tinbox.core.translation import TranslationError
+from tinbox import translate_document
+
+try:
+    result = await translate_document(content, config, translator)
+except TranslationError as e:
+    print(f"Translation failed: {e}")
+```
+
+Common causes:
+- API authentication failures
+- Network errors
+- Rate limiting
+- Invalid model configuration
+- Cost exceeding `max_cost` threshold
+- Unknown algorithm specified
+- Model-specific errors (context length exceeded, etc.)
+
+---
+
+## Examples
+
+### Using Different Algorithms
+
+```python
+from tinbox import translate_document, load_document, create_translator, TranslationConfig
+from pathlib import Path
+
+# Load document once
+content = await load_document(Path("document.pdf"))
+
+# Page-by-page (fastest)
+config_page = TranslationConfig(
+    source_lang="en",
+    target_lang="de",
+    model="openai",
+    model_name="gpt-4o",
+    algorithm="page",
+    input_file=Path("document.pdf"),
+)
+translator = create_translator(config_page)
+result_page = await translate_document(content, config_page, translator)
+
+# Sliding window (balanced)
+config_window = config_page.model_copy(update={
+    "algorithm": "sliding-window",
+    "window_size": 3000,
+    "overlap_size": 300,
+})
+result_window = await translate_document(content, config_window, translator)
+
+# Context-aware (highest quality)
+config_context = config_page.model_copy(update={
+    "algorithm": "context-aware",
+    "context_size": 2500,
+    "use_glossary": True,
+})
+result_context = await translate_document(content, config_context, translator)
+
+print(f"Page: {result_page.cost:.2f}, {result_page.time_taken:.1f}s")
+print(f"Window: {result_window.cost:.2f}, {result_window.time_taken:.1f}s")
+print(f"Context: {result_context.cost:.2f}, {result_context.time_taken:.1f}s")
+```
+
+### Handling Translation Errors
+
+```python
+from tinbox.core.translation import TranslationError
+
+try:
+    result = await translate_document(content, config, translator)
+    
+    # Check for partial failures
+    if result.failed_pages:
+        print(f"Warning: {len(result.failed_pages)} pages failed")
+        for page in result.failed_pages:
+            error = result.page_errors.get(page, "Unknown error")
+            print(f"  Page {page}: {error}")
+    
+    # Check warnings
+    for warning in result.warnings:
+        print(f"Warning: {warning}")
+        
+except TranslationError as e:
+    print(f"Translation failed completely: {e}")
+    # Handle total failure
+```
+
+### Custom Translation with Context
+
+```python
+from tinbox.core.translation import TranslationRequest, create_translator
+from tinbox.core.types import ModelType
+
+# Create translator
+config = TranslationConfig(...)
+translator = create_translator(config)
+
+# Manual translation with custom context
+request = TranslationRequest(
+    source_lang="en",
+    target_lang="fr",
+    content="This improves the quality significantly.",
+    context="""[PREVIOUS_CHUNK]
+We implemented the new algorithm.
+[/PREVIOUS_CHUNK]
+
+[PREVIOUS_CHUNK_TRANSLATION]
+Nous avons implémenté le nouvel algorithme.
+[/PREVIOUS_CHUNK_TRANSLATION]
+
+Use this context to maintain consistency.""",
+    content_type="text/plain",
+    model=ModelType.ANTHROPIC,
+    model_params={"model_name": "claude-3-sonnet"},
+)
+
+response = await translator.translate(request)
+print(response.text)
+```

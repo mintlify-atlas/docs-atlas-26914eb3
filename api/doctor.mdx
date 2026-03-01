@@ -1,0 +1,354 @@
+---
+title: "tinbox doctor"
+description: "Diagnostic tool to check Tinbox setup and diagnose common configuration issues"
+---
+
+## Overview
+
+The `tinbox doctor` command runs comprehensive diagnostic checks to verify your Tinbox installation and configuration. It checks system dependencies, Python packages, API keys, and local model support.
+
+## Basic Usage
+
+```bash
+tinbox doctor
+```
+
+<CodeGroup>
+```bash Human-Readable Output
+tinbox doctor
+```
+
+```bash JSON Output
+tinbox doctor --json
+```
+</CodeGroup>
+
+## Options
+
+<ParamField path="--json" type="boolean" default="false">
+  Output the diagnostic report as JSON instead of formatted tables.
+  
+  **Default:** `false`
+  
+  **Use case:** Useful for automation, CI/CD pipelines, or programmatic parsing of the diagnostic results.
+</ParamField>
+
+## What It Checks
+
+The `doctor` command runs diagnostic checks across multiple categories:
+
+### System Tools
+
+<ParamField path="poppler" type="system-tool">
+  **Required for:** PDF processing and translation
+  
+  **Check:** Verifies that `poppler` utilities (specifically `pdftoppm`) are installed and accessible
+  
+  **Installation:**
+  - **macOS:** `brew install poppler`
+  - **Ubuntu/Debian:** `sudo apt-get install poppler-utils`
+  - **Windows:** Download from [poppler for Windows](https://github.com/oschwartz10612/poppler-windows/releases/)
+</ParamField>
+
+### Python Packages
+
+<ParamField path="pdf2image" type="python-package">
+  **Required for:** PDF to image conversion
+  
+  **Installation:** `pip install pdf2image`
+</ParamField>
+
+<ParamField path="python-docx" type="python-package">
+  **Required for:** DOCX file support
+  
+  **Installation:** `pip install python-docx`
+</ParamField>
+
+<ParamField path="pillow" type="python-package">
+  **Required for:** Image processing
+  
+  **Installation:** `pip install pillow`
+</ParamField>
+
+### API Keys (Cloud Models)
+
+<ParamField path="OPENAI_API_KEY" type="environment-variable">
+  **Required for:** OpenAI models (`openai:gpt-4o`, etc.)
+  
+  **Setup:** Set environment variable with your OpenAI API key
+  
+  ```bash
+  export OPENAI_API_KEY="sk-..."
+  ```
+</ParamField>
+
+<ParamField path="ANTHROPIC_API_KEY" type="environment-variable">
+  **Required for:** Anthropic Claude models (`anthropic:claude-3-sonnet`, etc.)
+  
+  **Setup:** Set environment variable with your Anthropic API key
+  
+  ```bash
+  export ANTHROPIC_API_KEY="sk-ant-..."
+  ```
+</ParamField>
+
+<ParamField path="GOOGLE_API_KEY" type="environment-variable">
+  **Required for:** Google Gemini models (`google:gemini-1.5-pro`, etc.)
+  
+  **Setup:** Set environment variable with your Google API key
+  
+  ```bash
+  export GOOGLE_API_KEY="..."
+  ```
+</ParamField>
+
+### Local Model Support
+
+<ParamField path="ollama" type="local-service">
+  **Required for:** Local model inference (`ollama:mistral-small`, etc.)
+  
+  **Check:** Verifies that Ollama is installed and running
+  
+  **Installation:**
+  - Visit [ollama.ai](https://ollama.ai) for installation instructions
+  - Start Ollama service: `ollama serve`
+</ParamField>
+
+## Output Format
+
+### Human-Readable Format (Default)
+
+The default output displays diagnostic results in categorized tables:
+
+```
+Tinbox Diagnostic Report
+
+┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ System Tools       ┃          ┃                       ┃
+┡━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━┩
+│ Check              │ Status   │ Details               │
+├────────────────────┼──────────┼───────────────────────┤
+│ poppler            │ OK       │ Found at /usr/bin/... │
+└────────────────────┴──────────┴───────────────────────┘
+
+┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Python Packages    ┃          ┃                       ┃
+┡━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━┩
+│ Check              │ Status   │ Details               │
+├────────────────────┼──────────┼───────────────────────┤
+│ pdf2image          │ OK       │ Version: 1.16.3       │
+│ python-docx        │ OK       │ Version: 1.1.0        │
+│ pillow             │ OK       │ Version: 10.2.0       │
+└────────────────────┴──────────┴───────────────────────┘
+
+┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ API Keys           ┃          ┃                       ┃
+┡━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━┩
+│ Check              │ Status   │ Details               │
+├────────────────────┼──────────┼───────────────────────┤
+│ OPENAI_API_KEY     │ OK       │ Set                   │
+│ ANTHROPIC_API_KEY  │ MISSING  │ Install: export ...   │
+│ GOOGLE_API_KEY     │ MISSING  │ Install: export ...   │
+└────────────────────┴──────────┴───────────────────────┘
+
+Core checks passed. Some optional features may be unavailable.
+Set API keys for cloud models or install Ollama for local models.
+```
+
+### JSON Format
+
+The `--json` flag outputs a machine-readable JSON report:
+
+```json
+{
+  "all_ok": false,
+  "required_ok": true,
+  "checks": [
+    {
+      "name": "poppler",
+      "category": "System Tools",
+      "ok": true,
+      "required": true,
+      "details": "Found at /usr/bin/pdftoppm",
+      "hint": null
+    },
+    {
+      "name": "OPENAI_API_KEY",
+      "category": "API Keys",
+      "ok": true,
+      "required": false,
+      "details": "Set",
+      "hint": null
+    },
+    {
+      "name": "ANTHROPIC_API_KEY",
+      "category": "API Keys",
+      "ok": false,
+      "required": false,
+      "details": "Not set",
+      "hint": "Set environment variable: export ANTHROPIC_API_KEY=your-key"
+    }
+  ]
+}
+```
+
+## Exit Codes
+
+<ParamField path="0" type="exit-code">
+  **Success:** All required checks passed. Tinbox is ready to use.
+</ParamField>
+
+<ParamField path="0 (with warnings)" type="exit-code">
+  **Partial Success:** Core checks passed, but some optional features are unavailable (e.g., missing API keys).
+</ParamField>
+
+<ParamField path="1" type="exit-code">
+  **Failure:** One or more required checks failed. System dependencies or Python packages are missing.
+</ParamField>
+
+## Status Messages
+
+### All Checks Passed
+
+```
+All checks passed! Tinbox is ready to use.
+```
+
+All required and optional checks succeeded. You can use all Tinbox features.
+
+### Core Checks Passed
+
+```
+Core checks passed. Some optional features may be unavailable.
+Set API keys for cloud models or install Ollama for local models.
+```
+
+Required system dependencies are installed, but some cloud model providers or local model support is unavailable.
+
+### Required Checks Failed
+
+```
+Some required checks failed. Please fix the issues above.
+```
+
+Critical dependencies are missing. Install required system tools or Python packages before using Tinbox.
+
+## Examples
+
+### Run Basic Diagnostics
+
+```bash
+tinbox doctor
+```
+
+### Get JSON Output for CI/CD
+
+```bash
+tinbox doctor --json > doctor-report.json
+```
+
+### Check Before Translation
+
+```bash
+# Verify setup before running expensive translation
+tinbox doctor && tinbox translate document.pdf --model openai:gpt-4o --to es
+```
+
+### Parse JSON Output with jq
+
+```bash
+# Check if all required dependencies are available
+tinbox doctor --json | jq '.required_ok'
+
+# List all failed checks
+tinbox doctor --json | jq '.checks[] | select(.ok == false) | .name'
+
+# Get installation hints for missing items
+tinbox doctor --json | jq '.checks[] | select(.ok == false) | .hint'
+```
+
+## Troubleshooting Common Issues
+
+### Missing Poppler
+
+**Error:** `poppler` check fails
+
+**Solution:**
+```bash
+# macOS
+brew install poppler
+
+# Ubuntu/Debian
+sudo apt-get install poppler-utils
+
+# Verify installation
+which pdftoppm
+```
+
+### Missing Python Packages
+
+**Error:** `pdf2image`, `python-docx`, or `pillow` checks fail
+
+**Solution:**
+```bash
+# Install all extras at once
+pip install tinbox[all]
+
+# Or install individually
+pip install pdf2image python-docx pillow
+```
+
+### Missing API Keys
+
+**Error:** `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `GOOGLE_API_KEY` checks fail
+
+**Solution:**
+```bash
+# Set environment variables (add to ~/.bashrc or ~/.zshrc for persistence)
+export OPENAI_API_KEY="sk-..."
+export ANTHROPIC_API_KEY="sk-ant-..."
+export GOOGLE_API_KEY="..."
+
+# Verify
+tinbox doctor
+```
+
+### Ollama Not Running
+
+**Error:** `ollama` check fails
+
+**Solution:**
+```bash
+# Install Ollama (visit ollama.ai for platform-specific instructions)
+
+# Start Ollama service
+ollama serve
+
+# Verify in another terminal
+tinbox doctor
+```
+
+## Use in CI/CD Pipelines
+
+The `tinbox doctor` command is useful for validating environments in automated workflows:
+
+```yaml
+# GitHub Actions example
+- name: Check Tinbox setup
+  run: |
+    tinbox doctor --json > doctor-report.json
+    cat doctor-report.json
+    
+- name: Verify required checks
+  run: |
+    if ! tinbox doctor --json | jq -e '.required_ok'; then
+      echo "Required Tinbox dependencies are missing"
+      exit 1
+    fi
+```
+
+## See Also
+
+- [tinbox translate](/api/translate) - Main translation command
+- [Installation Guide](/getting-started/installation) - Setup instructions
+- [Environment Variables](/configuration/environment) - API key configuration

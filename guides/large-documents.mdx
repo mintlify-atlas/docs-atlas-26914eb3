@@ -1,0 +1,314 @@
+---
+title: Handling Large Documents
+description: Best practices and strategies for translating large documents efficiently
+---
+
+Tinbox is specifically designed to handle large documents that often fail with other translation tools. This guide covers strategies, algorithms, and features for processing extensive files efficiently.
+
+## Why Large Documents Are Challenging
+
+Large documents present several challenges when translating with LLMs:
+
+1. **Model Limitations** - Context window size restrictions
+2. **Rate Limiting** - API throttling on large requests
+3. **Copyright Refusals** - Models refusing entire books or long texts
+4. **Timeout Issues** - Requests failing due to processing time
+5. **Cost Concerns** - Large documents can be expensive to process
+
+Tinbox addresses all these issues through intelligent algorithms and checkpoint functionality.
+
+## Translation Algorithms
+
+Tinbox offers three algorithms, each optimized for different scenarios:
+
+### Context-Aware (Recommended for Text)
+
+The context-aware algorithm is the default for text files and handles large documents intelligently.
+
+**How it works:**
+- Splits text into manageable chunks
+- Maintains context between chunks
+- Preserves narrative flow and consistency
+
+```bash
+# Context-aware is the default for text files
+tinbox translate --to es --model openai:gpt-5-2025-08-07 large_document.txt
+
+# Customize chunk size
+tinbox translate --to es --context-size 1500 --model openai:gpt-5-2025-08-07 large_document.txt
+```
+
+<Tip>
+The default chunk size of 2000 characters works well for most documents. Adjust based on your needs:
+- Smaller chunks (1000-1500) for complex technical content
+- Larger chunks (2500-3000) for simple narrative text
+</Tip>
+
+### Page Algorithm (Required for PDFs)
+
+The page algorithm processes documents page-by-page, essential for PDFs.
+
+**How it works:**
+- Processes each page as a separate image
+- No OCR required
+- Maintains page boundaries
+
+```bash
+# Automatically used for PDFs
+tinbox translate --to de --model openai:gpt-4o document.pdf
+
+# Explicitly specify page algorithm
+tinbox translate --to de --algorithm page --model openai:gpt-4o document.pdf
+```
+
+<Note>
+PDF files can **only** use the page algorithm. Attempting to use other algorithms will result in an error.
+</Note>
+
+### Sliding Window (Deprecated)
+
+The sliding window algorithm is deprecated. Use context-aware instead for better results.
+
+```bash
+# Not recommended - use context-aware instead
+tinbox translate --to es --algorithm sliding-window --model openai:gpt-5-2025-08-07 document.txt
+```
+
+## Checkpointing for Large Files
+
+Checkpoints allow you to resume interrupted translations without losing progress.
+
+### How Checkpoints Work
+
+<Steps>
+  <Step title="Enable Checkpointing">
+    Specify a checkpoint directory:
+
+    ```bash
+    tinbox translate --to es \
+      --checkpoint-dir ./checkpoints \
+      --model openai:gpt-5-2025-08-07 \
+      large_document.txt
+    ```
+  </Step>
+
+  <Step title="Automatic Saving">
+    Tinbox automatically saves progress after each page/chunk (configurable with `--checkpoint-frequency`).
+  </Step>
+
+  <Step title="Resume on Interruption">
+    If translation is interrupted, run the same command again:
+
+    ```bash
+    # Same command - automatically resumes from checkpoint
+    tinbox translate --to es \
+      --checkpoint-dir ./checkpoints \
+      --model openai:gpt-5-2025-08-07 \
+      large_document.txt
+    ```
+  </Step>
+</Steps>
+
+### Checkpoint Frequency
+
+Control how often checkpoints are saved:
+
+```bash
+# Save checkpoint after every page/chunk (default)
+tinbox translate --to es \
+  --checkpoint-dir ./checkpoints \
+  --checkpoint-frequency 1 \
+  --model openai:gpt-5-2025-08-07 \
+  document.txt
+
+# Save checkpoint every 5 pages/chunks
+tinbox translate --to es \
+  --checkpoint-dir ./checkpoints \
+  --checkpoint-frequency 5 \
+  --model openai:gpt-5-2025-08-07 \
+  document.txt
+```
+
+<Warning>
+Higher checkpoint frequencies reduce storage and I/O overhead but increase the risk of data loss if interrupted.
+</Warning>
+
+## Custom Text Splitting
+
+For structured documents, use custom split tokens to maintain logical boundaries:
+
+```bash
+# Split on specific delimiter
+tinbox translate --to fr \
+  --split-token "---" \
+  --model openai:gpt-5-2025-08-07 \
+  structured_document.txt
+
+# Split on chapter markers
+tinbox translate --to de \
+  --split-token "# Chapter" \
+  --model openai:gpt-5-2025-08-07 \
+  book.txt
+```
+
+## Cost Management
+
+### Estimate Before Translating
+
+Always use `--dry-run` for large documents:
+
+```bash
+tinbox translate --to es --dry-run --model openai:gpt-5-2025-08-07 large_document.txt
+```
+
+This displays:
+- Estimated tokens
+- Estimated cost
+- Estimated time
+- Cost level (low/medium/high/very high)
+
+### Set Cost Limits
+
+Protect against unexpected costs:
+
+```bash
+tinbox translate --to es \
+  --max-cost 25.00 \
+  --model openai:gpt-5-2025-08-07 \
+  large_document.txt
+```
+
+Translation will stop if it exceeds the specified limit.
+
+<Tip>
+Combine `--dry-run` and `--max-cost` for complete cost control:
+
+```bash
+# 1. Estimate
+tinbox translate --to es --dry-run --model openai:gpt-5-2025-08-07 document.txt
+
+# 2. Set appropriate limit based on estimate
+tinbox translate --to es --max-cost 30.00 --model openai:gpt-5-2025-08-07 document.txt
+```
+</Tip>
+
+## Optimization Strategies
+
+### Choose the Right Model
+
+<CodeGroup>
+```bash Cost-Effective
+# Use efficient models for large documents
+tinbox translate --to es --model openai:gpt-4o-mini large_document.txt
+```
+
+```bash High-Quality
+# Use premium models for important documents
+tinbox translate --to es --model openai:gpt-5-2025-08-07 large_document.txt
+```
+
+```bash Local (Free)
+# Use Ollama for unlimited translations
+tinbox translate --to es --model ollama:llama3.1:8b large_document.txt
+```
+</CodeGroup>
+
+### Reasoning Effort
+
+Adjust reasoning effort based on document complexity:
+
+```bash
+# Minimal reasoning (default) - fast and cheap
+tinbox translate --to de --reasoning-effort minimal --model openai:gpt-5-2025-08-07 document.txt
+
+# High reasoning - better quality, much higher cost
+tinbox translate --to de --reasoning-effort high --model openai:gpt-5-2025-08-07 document.txt
+```
+
+<Warning>
+Higher reasoning efforts can significantly increase cost and time (2-10x). Only use for complex technical documents.
+</Warning>
+
+## Best Practices
+
+| Document Type | Recommended Settings | Notes |
+|---------------|---------------------|-------|
+| **Large Text Files** | `--context-size 2000` | Default context-aware works well |
+| **Very Large PDFs** | `--checkpoint-dir ./checkpoints --checkpoint-frequency 1` | Enable resume capability |
+| **Technical Docs** | `--glossary --save-glossary terms.json` | Maintain terminology consistency |
+| **Books/Novels** | `--split-token "Chapter"` | Preserve chapter boundaries |
+| **Budget-Conscious** | `--dry-run --max-cost 10.00` | Preview and limit costs |
+
+## Complete Workflow Example
+
+Here's a complete workflow for translating a large document:
+
+```bash
+# 1. Estimate costs
+tinbox translate --to es --dry-run --model openai:gpt-5-2025-08-07 large_book.txt
+
+# Output:
+# ┏━━━━━━━━━━━━━━━━━━━━━┓
+# ┃ Cost Estimate       ┃
+# ┣━━━━━━━━━━━━━━━━━━━━━┫
+# ┃ Estimated Tokens    ┃ 450,000
+# ┃ Estimated Cost      ┃ $35.25
+# ┃ Estimated Time      ┃ 25.3 minutes
+# ┃ Cost Level          ┃ High
+# ┗━━━━━━━━━━━━━━━━━━━━━┛
+
+# 2. Translate with all safety features
+tinbox translate --to es \
+  --model openai:gpt-5-2025-08-07 \
+  --checkpoint-dir ./checkpoints \
+  --max-cost 40.00 \
+  --glossary \
+  --save-glossary book_terms.json \
+  --output large_book_es.txt \
+  large_book.txt
+
+# 3. If interrupted, resume automatically
+tinbox translate --to es \
+  --model openai:gpt-5-2025-08-07 \
+  --checkpoint-dir ./checkpoints \
+  --max-cost 40.00 \
+  --glossary \
+  --save-glossary book_terms.json \
+  --output large_book_es.txt \
+  large_book.txt
+```
+
+## Troubleshooting
+
+**Translation times out**
+- Reduce chunk size: `--context-size 1500`
+- Enable checkpointing to save progress
+- Switch to a faster model
+
+**Model refuses to translate**
+- Use the context-aware algorithm (splits content into smaller chunks)
+- Try a different model provider
+- Reduce chunk size further
+
+**High costs**
+- Use `--dry-run` first
+- Consider local models with Ollama (free)
+- Reduce reasoning effort: `--reasoning-effort minimal`
+- Use a more cost-effective model
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Checkpoints & Resume" icon="bookmark" href="/guides/checkpoints-and-resume">
+    Deep dive into checkpoint functionality
+  </Card>
+  <Card title="Using Glossaries" icon="book" href="/guides/using-glossaries">
+    Maintain consistency across large documents
+  </Card>
+  <Card title="Local Models" icon="server" href="/guides/local-models">
+    Unlimited translations with Ollama
+  </Card>
+  <Card title="CLI Reference" icon="terminal" href="/api/translate">
+    Complete command-line reference
+  </Card>
+</CardGroup>

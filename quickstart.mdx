@@ -1,80 +1,507 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: "Quick Start"
+description: "Get started with Tinbox in minutes - translate your first document"
 ---
 
-## Get started in three steps
+## Your First Translation
 
-Get your documentation site running locally and make your first customization.
+Let's translate a document in three simple steps:
 
-### Step 1: Set up your local environment
-
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
+<Steps>
+  <Step title="Set Your API Key">
+    Choose your preferred LLM provider and set the API key:
     
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
+    ```bash
+    export OPENAI_API_KEY="your-api-key-here"
+    ```
     
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
+    <Info>
+      Don't have an API key? See the [Installation guide](/installation#api-keys-setup) for details on getting one.
+    </Info>
+  </Step>
+  
+  <Step title="Run Your First Translation">
+    Translate a text document to German:
     
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    ```bash
+    tinbox translate --to de --model openai:gpt-5-2025-08-07 document.txt
+    ```
+    
+    The translation will be printed to your console.
+  </Step>
+  
+  <Step title="Save to a File">
+    Add the `--output` flag to save the result:
+    
+    ```bash
+    tinbox translate --to de --model openai:gpt-5-2025-08-07 --output document_de.txt document.txt
+    ```
+  </Step>
+</Steps>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+## Basic Examples
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+### Text Documents
 
-### Step 3: Go live
+Translating text files is the simplest use case:
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+<CodeGroup>
+  ```bash Simple Translation
+  tinbox translate --to es --model openai:gpt-5-2025-08-07 story.txt
+  ```
+  
+  ```bash Specify Source Language
+  tinbox translate --from zh --to en --model openai:gpt-5-2025-08-07 document.txt
+  ```
+  
+  ```bash With Output File
+  tinbox translate --to fr --model openai:gpt-5-2025-08-07 --output story_fr.txt story.txt
+  ```
+</CodeGroup>
 
-## Next steps
+### PDF Documents
 
-Now that you have your docs running, explore these key features:
+<Warning>
+  PDF translation requires:
+  1. **Poppler** installed on your system (see [Installation](/installation#poppler-required-for-pdf-processing))
+  2. A **vision-capable model** like GPT-4o, Claude Sonnet, or Gemini Pro Vision
+</Warning>
+
+<CodeGroup>
+  ```bash Basic PDF Translation
+  tinbox translate --to de --algorithm page --model openai:gpt-4o document.pdf
+  ```
+  
+  ```bash With Custom DPI
+  tinbox translate --to es --algorithm page --pdf-dpi 300 --model openai:gpt-4o document.pdf
+  ```
+  
+  ```bash Save Output
+  tinbox translate --to fr --algorithm page --output document_fr.txt --model openai:gpt-4o document.pdf
+  ```
+</CodeGroup>
+
+<Tip>
+  Use `--algorithm page` for PDFs to process them page-by-page, which works best for maintaining formatting and context.
+</Tip>
+
+### Word Documents (DOCX)
+
+```bash
+# Translate a Word document
+tinbox translate --to de --model openai:gpt-5-2025-08-07 report.docx
+
+# Save to file
+tinbox translate --to es --output report_es.txt --model openai:gpt-5-2025-08-07 report.docx
+```
+
+## Model Providers
+
+Tinbox supports multiple LLM providers:
+
+<Tabs>
+  <Tab title="OpenAI">
+    ```bash
+    # GPT-5 (latest)
+    tinbox translate --to de --model openai:gpt-5-2025-08-07 document.txt
+    
+    # GPT-4o (vision-capable for PDFs)
+    tinbox translate --to es --model openai:gpt-4o document.pdf
+    ```
+    
+    <Note>
+      GPT-4o and GPT-5 both support vision for PDF translation.
+    </Note>
+  </Tab>
+  
+  <Tab title="Anthropic (Claude)">
+    ```bash
+    # Claude 4 Sonnet (vision-capable)
+    tinbox translate --to de --model anthropic:claude-3-sonnet document.pdf
+    
+    # For text documents
+    tinbox translate --to fr --model anthropic:claude-3-sonnet document.txt
+    ```
+    
+    Remember to set: `export ANTHROPIC_API_KEY="your-key"`
+  </Tab>
+  
+  <Tab title="Google (Gemini)">
+    ```bash
+    # Gemini Pro Vision
+    tinbox translate --to es --model google:gemini-pro-vision document.pdf
+    
+    # For text
+    tinbox translate --to de --model google:gemini-pro document.txt
+    ```
+    
+    Remember to set: `export GOOGLE_API_KEY="your-key"`
+  </Tab>
+  
+  <Tab title="Ollama (Local)">
+    ```bash
+    # Start Ollama server first
+    ollama serve  # In another terminal
+    
+    # Then use local models (free!)
+    tinbox translate --to de --model ollama:llama3.1:8b document.txt
+    tinbox translate --to fr --model ollama:mistral-small document.txt
+    ```
+    
+    <Info>
+      Ollama runs models locally - no API costs! But it doesn't support vision models for PDFs yet.
+    </Info>
+  </Tab>
+</Tabs>
+
+## Real-World Example
+
+Let's translate a story from English to German with checkpointing:
+
+<Steps>
+  <Step title="Preview the Cost">
+    Use `--dry-run` to estimate costs before translating:
+    
+    ```bash
+    tinbox translate --to de --model openai:gpt-5-2025-08-07 --dry-run story.txt
+    ```
+    
+    Output:
+    ```
+    📊 Translation Estimate:
+    - Input tokens: ~1,200
+    - Estimated output tokens: ~1,400
+    - Estimated cost: $0.03
+    - Estimated time: 15 seconds
+    ```
+  </Step>
+  
+  <Step title="Run with Checkpointing">
+    For large documents, enable checkpointing to resume if interrupted:
+    
+    ```bash
+    tinbox translate --to de \
+      --model openai:gpt-5-2025-08-07 \
+      --checkpoint-dir ./checkpoints \
+      --output story_de.txt \
+      story.txt
+    ```
+  </Step>
+  
+  <Step title="Monitor Progress">
+    Tinbox shows real-time progress:
+    
+    ```
+    🔄 Translating: story.txt
+    📄 Processing chunk 1/8...
+    💰 Cost so far: $0.01
+    ⏱️  Elapsed: 5s
+    
+    ✅ Translation complete!
+    📊 Final stats:
+    - Total tokens: 2,600
+    - Total cost: $0.03
+    - Total time: 18s
+    ```
+  </Step>
+</Steps>
+
+## Advanced Features
+
+### Glossary for Consistent Terminology
+
+Maintain consistent translations of technical terms:
+
+<CodeGroup>
+  ```bash Auto-Generate Glossary
+  # Tinbox will detect and save important terms
+  tinbox translate --to es \
+    --glossary \
+    --save-glossary terms.json \
+    --model openai:gpt-5-2025-08-07 \
+    technical_doc.txt
+  ```
+  
+  ```bash Use Existing Glossary
+  # Use predefined terminology
+  tinbox translate --to de \
+    --glossary-file company_terms.json \
+    --model openai:gpt-5-2025-08-07 \
+    document.txt
+  ```
+  
+  ```bash Extend Glossary
+  # Start with existing terms and add new ones
+  tinbox translate --to fr \
+    --glossary-file base_terms.json \
+    --save-glossary extended_terms.json \
+    --model openai:gpt-5-2025-08-07 \
+    document.txt
+  ```
+</CodeGroup>
+
+#### Glossary File Format
+
+Create a JSON file with term mappings:
+
+```json terms.json
+{
+  "entries": {
+    "API": "Interface de programmation",
+    "CPU": "Processeur",
+    "GPU": "Carte graphique",
+    "Machine Learning": "Apprentissage automatique"
+  }
+}
+```
+
+### Cost Control
+
+Prevent unexpected expenses:
+
+```bash
+# Set a maximum cost limit
+tinbox translate --to de \
+  --max-cost 5.00 \
+  --model openai:gpt-5-2025-08-07 \
+  document.txt
+
+# Translation will stop if cost exceeds $5.00
+```
+
+### Reasoning Effort
+
+Control translation quality vs. cost:
+
+<CodeGroup>
+  ```bash Minimal (Fast & Cheap)
+  tinbox translate --to es \
+    --reasoning-effort minimal \
+    --model openai:gpt-5-2025-08-07 \
+    document.txt
+  ```
+  
+  ```bash Low (Balanced)
+  tinbox translate --to de \
+    --reasoning-effort low \
+    --model openai:gpt-5-2025-08-07 \
+    document.txt
+  ```
+  
+  ```bash High (Best Quality)
+  tinbox translate --to fr \
+    --reasoning-effort high \
+    --max-cost 10.00 \
+    --model openai:gpt-5-2025-08-07 \
+    document.txt
+  ```
+</CodeGroup>
+
+<Tip>
+  Start with `minimal` reasoning effort. Only increase to `low` or `high` if you need better quality for complex documents.
+</Tip>
+
+## Output Formats
+
+Choose how you want your translation output:
+
+<Tabs>
+  <Tab title="Text (Default)">
+    ```bash
+    tinbox translate --to es --model openai:gpt-5-2025-08-07 document.txt
+    ```
+    
+    Simple text output, perfect for most use cases.
+  </Tab>
+  
+  <Tab title="JSON">
+    ```bash
+    tinbox translate --to es \
+      --format json \
+      --model openai:gpt-5-2025-08-07 \
+      document.txt
+    ```
+    
+    Output:
+    ```json
+    {
+      "translation": "...",
+      "metadata": {
+        "source_language": "en",
+        "target_language": "es",
+        "model": "openai:gpt-5-2025-08-07",
+        "tokens_used": 2500,
+        "cost": 0.03,
+        "duration_seconds": 18
+      }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Markdown">
+    ```bash
+    tinbox translate --to de \
+      --format markdown \
+      --model openai:gpt-5-2025-08-07 \
+      document.txt
+    ```
+    
+    Formatted markdown report with metadata.
+  </Tab>
+</Tabs>
+
+## Best Practices by Document Type
 
 <CardGroup cols={2}>
+  <Card title="PDFs" icon="file-pdf">
+    ```bash
+    tinbox translate --to es \
+      --algorithm page \
+      --model openai:gpt-4o \
+      document.pdf
+    ```
+    
+    - Use `--algorithm page`
+    - Requires vision-capable model
+    - Consider `--pdf-dpi 300` for higher quality
+  </Card>
+  
+  <Card title="Large Text Files" icon="file-lines">
+    ```bash
+    tinbox translate --to de \
+      --context-size 2000 \
+      --checkpoint-dir ./checkpoints \
+      --model openai:gpt-5-2025-08-07 \
+      large_file.txt
+    ```
+    
+    - Use context-aware algorithm (default)
+    - Enable checkpointing
+    - Adjust `--context-size` as needed
+  </Card>
+  
+  <Card title="Technical Documents" icon="code">
+    ```bash
+    tinbox translate --to fr \
+      --glossary \
+      --save-glossary terms.json \
+      --model openai:gpt-5-2025-08-07 \
+      tech_doc.pdf
+    ```
+    
+    - Enable glossary support
+    - Save terms for future use
+    - Consider higher reasoning effort
+  </Card>
+  
+  <Card title="Cost-Sensitive Projects" icon="dollar-sign">
+    ```bash
+    tinbox translate --to es \
+      --dry-run \
+      --max-cost 5.00 \
+      --reasoning-effort minimal \
+      --model openai:gpt-5-2025-08-07 \
+      document.txt
+    ```
+    
+    - Always use `--dry-run` first
+    - Set `--max-cost` limits
+    - Use minimal reasoning effort
+    - Consider Ollama for local models
+  </Card>
+</CardGroup>
 
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
+## Common Workflows
 
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
+### Batch Translation
 
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
+Translate multiple documents efficiently:
 
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
+```bash
+# Loop through all text files
+for file in *.txt; do
+  tinbox translate --to de \
+    --model openai:gpt-5-2025-08-07 \
+    --output "${file%.txt}_de.txt" \
+    "$file"
+done
+```
 
+### Resume Interrupted Translation
+
+If a translation is interrupted, simply rerun with the same checkpoint directory:
+
+```bash
+# First run (interrupted)
+tinbox translate --to de \
+  --checkpoint-dir ./checkpoints \
+  --model openai:gpt-5-2025-08-07 \
+  large_document.txt
+
+# Resume from checkpoint
+tinbox translate --to de \
+  --checkpoint-dir ./checkpoints \
+  --model openai:gpt-5-2025-08-07 \
+  large_document.txt
+```
+
+Tinbox automatically detects and resumes from the last checkpoint.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Translation quality is poor" icon="star-half">
+    Try these improvements:
+    1. Increase reasoning effort: `--reasoning-effort high`
+    2. Use a better model: `openai:gpt-5-2025-08-07` or `anthropic:claude-3-sonnet`
+    3. Enable glossary: `--glossary` for consistent terminology
+    4. Specify source language: `--from en` (don't rely on auto-detect)
+  </Accordion>
+  
+  <Accordion title="PDF translation not working" icon="file-pdf">
+    Check these requirements:
+    1. Poppler installed: Run `tinbox doctor` to verify
+    2. Using vision-capable model: GPT-4o, Claude Sonnet, or Gemini Pro Vision
+    3. PDF extras installed: `pip install tinbox[pdf]`
+  </Accordion>
+  
+  <Accordion title="Too expensive" icon="dollar-sign">
+    Reduce costs with:
+    1. Use local Ollama models (free)
+    2. Set `--reasoning-effort minimal`
+    3. Set `--max-cost` limits
+    4. Use `--dry-run` to preview costs
+    5. Smaller context size: `--context-size 1500`
+  </Accordion>
+  
+  <Accordion title="Translation timing out" icon="clock">
+    For large documents:
+    1. Enable checkpointing: `--checkpoint-dir ./checkpoints`
+    2. Reduce chunk size: `--context-size 1500`
+    3. For PDFs, use: `--algorithm page`
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Command Reference" icon="terminal" href="/api/translate">
+    Complete guide to all CLI options and flags
+  </Card>
+  
+  <Card title="Translation Algorithms" icon="brain" href="/concepts/translation-algorithms">
+    Learn about different translation strategies
+  </Card>
+  
+  <Card title="Model Providers" icon="robot" href="/concepts/model-providers">
+    Detailed comparison of LLM providers
+  </Card>
+  
+  <Card title="Advanced Usage" icon="wand-magic-sparkles" href="/advanced/algorithms-comparison">
+    Custom splitting, glossaries, and optimization
+  </Card>
 </CardGroup>
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  Need help? Run `tinbox doctor` to diagnose issues or check our troubleshooting guide.
 </Note>

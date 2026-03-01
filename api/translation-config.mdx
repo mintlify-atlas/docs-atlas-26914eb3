@@ -1,0 +1,274 @@
+---
+title: TranslationConfig
+description: Configuration class for translation tasks with all available settings
+---
+
+The `TranslationConfig` class is an immutable Pydantic model that holds all configuration options for a translation task.
+
+## Basic Usage
+
+```python
+from tinbox import TranslationConfig
+from pathlib import Path
+
+# Minimal configuration
+config = TranslationConfig(
+    source_lang="en",
+    target_lang="de",
+    model="openai",
+    model_name="gpt-4o",
+    algorithm="page",
+    input_file=Path("document.pdf"),
+)
+
+# Full configuration with all options
+config = TranslationConfig(
+    # Required fields
+    source_lang="en",
+    target_lang="ja",
+    model="anthropic",
+    model_name="claude-3-sonnet",
+    algorithm="context-aware",
+    input_file=Path("input.pdf"),
+    output_file=Path("output.txt"),
+    
+    # UI and progress
+    verbose=True,
+    progress_callback=lambda tokens: print(f"Processed {tokens} tokens"),
+    
+    # Cost control
+    max_cost=5.0,
+    force=False,
+    
+    # Algorithm settings
+    window_size=3000,
+    overlap_size=300,
+    context_size=2500,
+    custom_split_token="\n---\n",
+    
+    # Checkpoint settings
+    checkpoint_dir=Path(".checkpoints"),
+    checkpoint_frequency=5,
+    resume_from_checkpoint=True,
+    
+    # Advanced features
+    use_glossary=True,
+    reasoning_effort="medium",
+)
+```
+
+## Required Fields
+
+<ParamField path="source_lang" type="str" required>
+  Source language code (e.g., `"en"`, `"fr"`, `"ja"`). Use standard language codes.
+</ParamField>
+
+<ParamField path="target_lang" type="str" required>
+  Target language code (e.g., `"de"`, `"es"`, `"zh"`). Use standard language codes.
+</ParamField>
+
+<ParamField path="model" type="ModelType" required>
+  LLM model provider. Options:
+  - `"openai"` - OpenAI models (GPT-4, etc.)
+  - `"anthropic"` - Anthropic models (Claude)
+  - `"ollama"` - Local models via Ollama
+  - `"gemini"` - Google's Gemini models
+</ParamField>
+
+<ParamField path="model_name" type="str" required>
+  Specific model name within the provider. Examples:
+  - OpenAI: `"gpt-4o"`, `"gpt-4-turbo"`, `"gpt-5-2025-08-07"`
+  - Anthropic: `"claude-3-sonnet"`, `"claude-3-opus"`, `"claude-4-sonnet"`
+  - Gemini: `"gemini-2.5-pro"`, `"gemini-1.5-flash"`
+  - Ollama: `"llama3.1"`, `"mistral"`
+</ParamField>
+
+<ParamField path="algorithm" type="Literal['page', 'sliding-window', 'context-aware']" required>
+  Translation algorithm to use:
+  - `"page"` - Translate each page independently (fast, no context)
+  - `"sliding-window"` - Use overlapping windows (good for continuity)
+  - `"context-aware"` - Smart chunking with previous/next context (best quality)
+</ParamField>
+
+<ParamField path="input_file" type="Path" required>
+  Path to the input document. Supported formats: `.pdf`, `.docx`, `.txt`.
+</ParamField>
+
+## Optional Fields
+
+<ParamField path="output_file" type="Path | None" default="None">
+  Path to save the translated output. If `None`, output is returned but not saved.
+</ParamField>
+
+### UI and Progress Settings
+
+<ParamField path="verbose" type="bool" default="False">
+  Whether to show detailed progress information during translation.
+</ParamField>
+
+<ParamField path="progress_callback" type="Callable[[int], None] | None" default="None">
+  Callback function to update progress. Receives the number of tokens processed.
+  
+  ```python
+  def update_progress(tokens: int):
+      print(f"Processed {tokens} tokens so far")
+  
+  config = TranslationConfig(
+      ...,
+      progress_callback=update_progress
+  )
+  ```
+</ParamField>
+
+### Cost Control Settings
+
+<ParamField path="max_cost" type="float | None" default="None">
+  Maximum cost threshold in USD. Translation will stop if this limit is exceeded. Must be >= 0.
+  
+  ```python
+  config = TranslationConfig(
+      ...,
+      max_cost=10.0  # Stop if cost exceeds $10
+  )
+  ```
+</ParamField>
+
+<ParamField path="force" type="bool" default="False">
+  Whether to skip cost and size warnings. Use with caution.
+</ParamField>
+
+### Sliding Window Algorithm Settings
+
+<ParamField path="window_size" type="int" default="2000">
+  Window size in characters for sliding window translation. Must be > 0.
+  
+  Larger windows provide more context but use more tokens per request.
+</ParamField>
+
+<ParamField path="overlap_size" type="int" default="200">
+  Overlap size in characters between windows. Must be > 0 and < `window_size`.
+  
+  Overlap helps maintain continuity between windows.
+</ParamField>
+
+### Context-Aware Algorithm Settings
+
+<ParamField path="context_size" type="int | None" default="2000">
+  Target chunk size in characters for context-aware translation. Must be > 0.
+  
+  Text is split at natural boundaries (paragraphs, sentences) near this size.
+</ParamField>
+
+<ParamField path="custom_split_token" type="str | None" default="None">
+  Custom token to split text on for context-aware algorithm. When provided, ignores `context_size`.
+  
+  ```python
+  # Split on custom separator
+  config = TranslationConfig(
+      ...,
+      algorithm="context-aware",
+      custom_split_token="\n---\n"  # Split on horizontal rules
+  )
+  ```
+</ParamField>
+
+### Checkpoint Settings
+
+<ParamField path="checkpoint_dir" type="Path | None" default="None">
+  Directory to store translation checkpoints. Enables resuming interrupted translations.
+  
+  ```python
+  config = TranslationConfig(
+      ...,
+      checkpoint_dir=Path(".checkpoints")
+  )
+  ```
+</ParamField>
+
+<ParamField path="checkpoint_frequency" type="int" default="1">
+  Save checkpoint every N pages/chunks. Must be > 0.
+  
+  Higher values reduce I/O overhead but increase potential re-work if interrupted.
+</ParamField>
+
+<ParamField path="resume_from_checkpoint" type="bool" default="True">
+  Whether to try resuming from checkpoint if one exists.
+</ParamField>
+
+### Advanced Features
+
+<ParamField path="use_glossary" type="bool" default="False">
+  Enable glossary for consistent term translations. The model will maintain a glossary of key terms and their translations throughout the document.
+  
+  Adds approximately 20% token overhead but improves consistency.
+</ParamField>
+
+<ParamField path="reasoning_effort" type="Literal['minimal', 'low', 'medium', 'high']" default="minimal">
+  Model reasoning effort level. Higher levels improve translation quality but significantly increase cost and time.
+  
+  - `"minimal"` - Fast, cost-effective (default)
+  - `"low"` - Slight improvement, moderate cost increase
+  - `"medium"` - Better quality, higher cost
+  - `"high"` - Best quality, much higher cost
+  
+  <Warning>
+    Higher reasoning efforts can multiply costs by 3-10x. Always set `max_cost` when using elevated reasoning.
+  </Warning>
+</ParamField>
+
+## Configuration Behavior
+
+<Note>
+  `TranslationConfig` is immutable (`frozen=True`). Once created, fields cannot be modified. Create a new config instance to change settings.
+</Note>
+
+```python
+from pydantic import ValidationError
+
+# Valid: Create new config
+config1 = TranslationConfig(...)
+config2 = config1.model_copy(update={"max_cost": 5.0})
+
+# Invalid: Cannot modify existing config
+try:
+    config1.max_cost = 10.0  # Raises ValidationError
+except ValidationError as e:
+    print("Config is immutable")
+```
+
+## Type Reference
+
+```python
+class TranslationConfig(BaseModel):
+    # Basic settings
+    source_lang: str
+    target_lang: str
+    model: ModelType
+    model_name: str
+    algorithm: Literal["page", "sliding-window", "context-aware"]
+    input_file: Path
+    output_file: Path | None = None
+
+    # UI and progress
+    verbose: bool = False
+    progress_callback: Callable[[int], None] | None = None
+
+    # Cost control
+    max_cost: float | None = None  # >= 0.0
+    force: bool = False
+
+    # Algorithm-specific
+    window_size: int = 2000  # > 0
+    overlap_size: int = 200  # > 0
+    context_size: int | None = 2000  # > 0
+    custom_split_token: str | None = None
+
+    # Checkpoints
+    checkpoint_dir: Path | None = None
+    checkpoint_frequency: int = 1  # > 0
+    resume_from_checkpoint: bool = True
+
+    # Advanced
+    use_glossary: bool = False
+    reasoning_effort: Literal["minimal", "low", "medium", "high"] = "minimal"
+```

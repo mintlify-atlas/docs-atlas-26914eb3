@@ -1,0 +1,435 @@
+---
+title: Document Processing
+description: How Tinbox processes PDF, DOCX, and TXT files for translation
+---
+
+Tinbox uses specialized processors to extract content from different document types. Each processor is optimized for its file format and handles metadata extraction, content parsing, and error handling.
+
+## Supported File Types
+
+<CardGroup cols={3}>
+  <Card title="PDF" icon="file-pdf" color="#e53e3e">
+    Converts pages to images for vision model translation
+  </Card>
+  <Card title="DOCX" icon="file-word" color="#2b6cb0">
+    Extracts text from Word documents with paragraph structure
+  </Card>
+  <Card title="TXT" icon="file-lines" color="#38a169">
+    Reads plain text files with UTF-8 encoding detection
+  </Card>
+</CardGroup>
+
+## Document Processing Architecture
+
+All processors implement the `DocumentProcessor` protocol defined in `processor/__init__.py:50-93`:
+
+```python
+class DocumentProcessor(Protocol):
+    """Protocol for document processors."""
+    
+    @property
+    def supported_types(self) -> set[FileType]:
+        """Get the file types supported by this processor."""
+        ...
+    
+    async def get_metadata(self, file_path: Path) -> DocumentMetadata:
+        """Extract metadata from a document."""
+        ...
+    
+    async def extract_content(
+        self, file_path: Path, *, start_page: int = 1, end_page: int | None = None
+    ) -> AsyncIterator[str | bytes]:
+        """Extract content from a document."""
+        ...
+```
+
+### Document Content Model
+
+From `processor/__init__.py:18-34`:
+
+```python
+class DocumentContent(BaseModel):
+    """Represents a document ready for translation."""
+    
+    pages: list[str | bytes]  # Individual pages for translation
+    content_type: str = Field(pattern=r"^(text|image)/.+$")
+    metadata: dict[str, Any] = Field(default_factory=dict)
+```
+
+<Info>
+  Pages can contain either text strings or image bytes, allowing Tinbox to handle both text-based and vision-based translations.
+</Info>
+
+## PDF Processing
+
+PDF documents are converted to images for translation using vision models. This approach preserves layout, formatting, and handles complex PDFs with images and tables.
+
+### How It Works
+
+1. **Metadata Extraction**: Uses `pypdf` to read PDF metadata and count pages
+2. **Page Conversion**: Converts each page to PNG images using `pdf2image`
+3. **Image Generation**: Default 200 DPI (configurable via settings)
+4. **Lazy Loading**: Pages are yielded as an async iterator for memory efficiency
+
+### Code Example
+
+From `processor/pdf.py:118-175`:
+
+```python
+class PdfProcessor(BaseDocumentProcessor):
+    def __init__(self, settings: dict | None = None):
+        super().__init__()
+        self.settings = settings or {}
+        self.dpi = self.settings.get("dpi", 200)  # Default DPI
+    
+    async def extract_content(
+        self, file_path: Path, *, start_page: int = 1, end_page: int | None = None
+    ) -> AsyncIterator[str | bytes]:
+        """Extract content from a PDF document."""
+        # Check if poppler is available
+        _check_poppler_available()
+        
+        # Convert pages to images
+        convert_from_path = _get_convert_from_path()
+        pages = convert_from_path(
+            file_path,
+            first_page=start_page,
+            last_page=end_page,
+            dpi=self.dpi,
+        )
+        
+        for page in pages:
+            with io.BytesIO() as bio:
+                page.save(bio, format="PNG")
+                yield bio.getvalue()
+```
+
+### System Requirements
+
+PDF processing requires two dependencies:
+
+1. **Python Package**: `pdf2image` (installed with `tinbox[pdf]` or `tinbox[all]`)
+2. **System Dependency**: `poppler-utils`
+
+<CodeGroup>
+```bash macOS
+brew install poppler
+```
+
+```bash Ubuntu/Debian
+sudo apt-get install poppler-utils
+```
+
+```bash CentOS/RHEL
+sudo yum install poppler-utils
+```
+
+```bash Fedora
+sudo dnf install poppler-utils
+```
+</CodeGroup>
+
+### Configuration
+
+You can customize PDF processing settings:
+
+```python
+from tinbox.core.processor import get_processor_for_file_type
+from tinbox.core.types import FileType
+
+# Create processor with custom DPI
+processor = get_processor_for_file_type(
+    FileType.PDF,
+    settings={"dpi": 300}  # Higher quality images
+)
+```
+
+<Tip>
+  Higher DPI values (e.g., 300) produce better quality images but increase file size and processing time. Use 200 DPI for most documents.
+</Tip>
+
+### Metadata Extraction
+
+From `processor/pdf.py:78-116`:
+
+```python
+async def get_metadata(self, file_path: Path) -> DocumentMetadata:
+    with open(file_path, "rb") as f:
+        pdf = pypdf.PdfReader(f)
+        info = pdf.metadata
+        
+        title = info.get("/Title") or file_path.name
+        
+        return DocumentMetadata(
+            file_type=FileType.PDF,
+            total_pages=len(pdf.pages),
+            title=title,
+            author=info.get("/Author", None),
+            creation_date=info.get("/CreationDate", None),
+            modification_date=info.get("/ModDate", None),
+            custom_metadata={"pdf_info": dict(info) if info else {}},
+        )
+```
+
+## DOCX Processing
+
+Word documents are processed as single-page text documents, with paragraph extraction and RTL detection.
+
+### How It Works
+
+1. **Validation**: Checks file extension and ZIP structure
+2. **Text Extraction**: Extracts all paragraph text, filtering empty paragraphs
+3. **RTL Detection**: Scans for Hebrew/Arabic characters
+4. **Metadata**: Reads core properties (author, dates, keywords)
+
+### Code Example
+
+From `processor/docx.py:47-60`:
+
+```python
+def _extract_text(doc: Document) -> str:
+    """Extract all text from a Word document."""
+    paragraphs = []
+    for paragraph in doc.paragraphs:
+        if paragraph.text.strip():
+            paragraphs.append(paragraph.text.strip())
+    return "\n".join(paragraphs)
+```
+
+### RTL Language Detection
+
+From `processor/docx.py:23-44`:
+
+```python
+def detect_rtl(text: str) -> bool:
+    """Detect if text contains RTL characters."""
+    rtl_ranges = [
+        (0x0590, 0x05FF),  # Hebrew
+        (0x0600, 0x06FF),  # Arabic
+        (0x0750, 0x077F),  # Arabic Supplement
+        (0x08A0, 0x08FF),  # Arabic Extended-A
+        (0xFB50, 0xFDFF),  # Arabic Presentation Forms-A
+        (0xFE70, 0xFEFF),  # Arabic Presentation Forms-B
+    ]
+    
+    return any(
+        any(start <= ord(char) <= end for start, end in rtl_ranges) 
+        for char in text
+    )
+```
+
+### Metadata Extraction
+
+From `processor/docx.py:86-124`:
+
+```python
+async def get_metadata(self, file_path: Path) -> DocumentMetadata:
+    doc = Document(file_path)
+    core_props = doc.core_properties
+    text = _extract_text(doc)
+    
+    return DocumentMetadata(
+        file_type=FileType.DOCX,
+        total_pages=1,  # Treat as single text file
+        title=file_path.name,
+        author=core_props.author,
+        creation_date=str(core_props.created) if core_props.created else None,
+        modification_date=str(core_props.modified) if core_props.modified else None,
+        custom_metadata={
+            "category": core_props.category,
+            "comments": core_props.comments,
+            "keywords": core_props.keywords,
+            "language": core_props.language,
+            "subject": core_props.subject,
+            "contains_rtl": detect_rtl(text),
+        },
+    )
+```
+
+<Note>
+  DOCX files are treated as single-page documents. Use sliding-window or context-aware algorithms for best results with Word documents.
+</Note>
+
+## TXT Processing
+
+Plain text files are the simplest document type, with UTF-8 encoding detection and RTL support.
+
+### How It Works
+
+1. **Encoding Detection**: Attempts UTF-8, raises error on failure
+2. **Content Reading**: Reads entire file as single string
+3. **RTL Detection**: Scans for Hebrew/Arabic characters
+4. **Metadata**: Extracts file stats (size, timestamps)
+
+### Code Example
+
+From `processor/text.py:43-61`:
+
+```python
+def detect_encoding(file_path: Path) -> str:
+    """Detect the encoding of a text file."""
+    try:
+        with open(file_path, encoding="utf-8") as f:
+            f.read()
+        return "utf-8"
+    except UnicodeDecodeError:
+        raise ProcessingError("Invalid UTF-8 encoding")
+```
+
+### Content Extraction
+
+From `processor/text.py:120-152`:
+
+```python
+async def extract_content(
+    self, file_path: Path, *, start_page: int = 1, end_page: int | None = None
+) -> AsyncIterator[str | bytes]:
+    """Extract content from a text document."""
+    if start_page != 1 or (end_page is not None and end_page != 1):
+        raise ProcessingError("Text files only support page 1")
+    
+    encoding = detect_encoding(file_path)
+    text = file_path.read_text(encoding=encoding)
+    yield text
+```
+
+### Metadata Extraction
+
+From `processor/text.py:75-118`:
+
+```python
+async def get_metadata(self, file_path: Path) -> DocumentMetadata:
+    encoding = detect_encoding(file_path)
+    text = file_path.read_text(encoding=encoding)
+    stats = file_path.stat()
+    
+    return DocumentMetadata(
+        file_type=FileType.TXT,
+        total_pages=1,
+        title=file_path.name,
+        author=None,
+        creation_date=str(stats.st_ctime),
+        modification_date=str(stats.st_mtime),
+        custom_metadata={
+            "size_bytes": stats.st_size,
+            "encoding": encoding,
+            "contains_rtl": detect_rtl(text),
+        },
+    )
+```
+
+<Warning>
+  TXT files must be UTF-8 encoded. Other encodings will raise a `ProcessingError`.
+</Warning>
+
+## Loading Documents
+
+The `load_document` function is the main entry point for document processing:
+
+From `processor/__init__.py:189-228`:
+
+```python
+async def load_document(
+    file_path: Path,
+    *,
+    processor_settings: dict[str, Any] | None = None,
+) -> DocumentContent:
+    """Load a document and prepare it for translation."""
+    file_type = FileType(file_path.suffix.lstrip(".").lower())
+    processor = get_processor_for_file_type(file_type, settings=processor_settings)
+    
+    # Get metadata first
+    metadata = await processor.get_metadata(file_path)
+    
+    # Extract all pages
+    pages = []
+    async for page in processor.extract_content(file_path):
+        pages.append(page)
+    
+    # Determine content type based on first page
+    content_type = "image/png" if isinstance(pages[0], bytes) else "text/plain"
+    
+    return DocumentContent(
+        pages=pages,
+        content_type=content_type,
+        metadata={"file_type": file_type, **metadata.model_dump()},
+    )
+```
+
+## Error Handling
+
+All processors inherit from `BaseDocumentProcessor` and raise `ProcessingError` for consistent error handling:
+
+```python
+class ProcessingError(Exception):
+    """Error during document processing."""
+    pass
+```
+
+### Common Errors
+
+<AccordionGroup>
+  <Accordion title="File not found">
+    ```
+    ProcessingError: File not found: document.pdf
+    ```
+    The specified file path doesn't exist.
+  </Accordion>
+  
+  <Accordion title="Invalid file format">
+    ```
+    ProcessingError: File format not supported
+    ```
+    File has wrong extension or is corrupted.
+  </Accordion>
+  
+  <Accordion title="Missing dependencies">
+    ```
+    ProcessingError: pdf2image is not installed. PDF image conversion requires the PDF extras.
+    ```
+    Install with `pip install tinbox[pdf]`.
+  </Accordion>
+  
+  <Accordion title="Invalid UTF-8 encoding">
+    ```
+    ProcessingError: Invalid UTF-8 encoding
+    ```
+    TXT file is not UTF-8 encoded.
+  </Accordion>
+</AccordionGroup>
+
+## Page Range Support
+
+All processors support page range extraction:
+
+```python
+# Extract specific page range
+pages = []
+async for page in processor.extract_content(
+    file_path,
+    start_page=5,
+    end_page=10
+):
+    pages.append(page)
+```
+
+<Note>
+  TXT and DOCX files only support `start_page=1` and `end_page=1` or `None`, since they're treated as single-page documents.
+</Note>
+
+## File Type Detection
+
+File types are detected by extension:
+
+```python
+from tinbox.core.types import FileType
+from pathlib import Path
+
+file_path = Path("document.pdf")
+file_type = FileType(file_path.suffix.lstrip(".").lower())
+# FileType.PDF
+```
+
+<Info>
+  Supported extensions: `.pdf`, `.docx`, `.txt` (case-insensitive)
+</Info>

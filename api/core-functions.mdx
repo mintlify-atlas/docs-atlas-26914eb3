@@ -1,0 +1,263 @@
+---
+title: Core Functions
+description: Essential functions for document translation and cost estimation
+---
+
+Core functions provide the main entry points for translating documents, loading files, estimating costs, and creating translator instances.
+
+## translate_document
+
+Translate a document using the specified translation algorithm.
+
+```python
+from tinbox import translate_document, load_document, create_translator, TranslationConfig
+from pathlib import Path
+
+# Load document
+content = await load_document(Path("document.pdf"))
+
+# Create configuration
+config = TranslationConfig(
+    source_lang="en",
+    target_lang="de",
+    model="openai",
+    model_name="gpt-4o",
+    algorithm="page",
+    input_file=Path("document.pdf"),
+)
+
+# Create translator and translate
+translator = create_translator(config)
+result = await translate_document(content, config, translator)
+print(f"Translation: {result.text}")
+print(f"Cost: ${result.cost:.2f}")
+```
+
+<ParamField path="content" type="DocumentContent" required>
+  The document content to translate. Obtain this using `load_document()`.
+</ParamField>
+
+<ParamField path="config" type="TranslationConfig" required>
+  Translation configuration including source/target languages, model settings, and algorithm.
+</ParamField>
+
+<ParamField path="translator" type="ModelInterface" required>
+  Model interface to use for translation. Create using `create_translator()`.
+</ParamField>
+
+<ParamField path="progress" type="Progress | None" default="None">
+  Optional Rich progress bar instance for tracking translation progress.
+</ParamField>
+
+<ParamField path="checkpoint_manager" type="CheckpointManager | None" default="None">
+  Optional checkpoint manager for saving/resuming translation state.
+</ParamField>
+
+<ParamField path="glossary_manager" type="GlossaryManager | None" default="None">
+  Optional glossary manager for maintaining consistent term translations.
+</ParamField>
+
+<ResponseField name="text" type="str">
+  The translated text.
+</ResponseField>
+
+<ResponseField name="tokens_used" type="int">
+  Total number of tokens used during translation.
+</ResponseField>
+
+<ResponseField name="cost" type="float">
+  Total cost in USD.
+</ResponseField>
+
+<ResponseField name="time_taken" type="float">
+  Time taken in seconds.
+</ResponseField>
+
+<ResponseField name="failed_pages" type="list[int]" default="[]">
+  List of page numbers that failed to translate (page-by-page algorithm only).
+</ResponseField>
+
+<ResponseField name="page_errors" type="dict[int, str]" default="{}">
+  Mapping from page number to error message for failed pages.
+</ResponseField>
+
+<ResponseField name="warnings" type="list[str]" default="[]">
+  Non-fatal warnings during translation.
+</ResponseField>
+
+<Expandable title="Raises">
+  <ResponseField name="TranslationError">
+    Raised if translation fails or if an unknown algorithm is specified.
+  </ResponseField>
+</Expandable>
+
+---
+
+## load_document
+
+Load a document and prepare it for translation.
+
+```python
+from tinbox import load_document
+from pathlib import Path
+
+# Load a PDF document
+content = await load_document(Path("document.pdf"))
+
+# Load with custom processor settings (e.g., higher DPI for PDFs)
+content = await load_document(
+    Path("document.pdf"),
+    processor_settings={"dpi": 300}
+)
+
+print(f"Pages: {len(content.pages)}")
+print(f"Content type: {content.content_type}")
+print(f"Metadata: {content.metadata}")
+```
+
+<ParamField path="file_path" type="Path" required>
+  Path to the document to load. Supported formats: `.pdf`, `.docx`, `.txt`.
+</ParamField>
+
+<ParamField path="processor_settings" type="dict[str, Any] | None" default="None">
+  Optional settings passed to the document processor. For PDFs, you can specify `{"dpi": 300}` to control image resolution.
+</ParamField>
+
+<ResponseField name="pages" type="list[str | bytes]">
+  Individual pages ready for translation. Text files contain strings, while image-based content (like scanned PDFs) contains bytes.
+</ResponseField>
+
+<ResponseField name="content_type" type="str">
+  MIME type of the content. Either `"text/plain"` for text content or `"image/png"` for image content.
+</ResponseField>
+
+<ResponseField name="metadata" type="dict[str, Any]">
+  Document metadata including file type, total pages, title, author, and creation/modification dates.
+</ResponseField>
+
+<Expandable title="Raises">
+  <ResponseField name="ProcessingError">
+    Raised if document loading fails due to unsupported file type, corrupted file, or other processing errors.
+  </ResponseField>
+</Expandable>
+
+---
+
+## estimate_cost
+
+Estimate the cost and time required to translate a document.
+
+```python
+from tinbox.core.cost import estimate_cost
+from tinbox.core.types import ModelType
+from pathlib import Path
+
+# Basic cost estimation
+estimate = estimate_cost(
+    file_path=Path("document.pdf"),
+    model=ModelType.OPENAI,
+    algorithm="page"
+)
+
+print(f"Estimated tokens: {estimate.estimated_tokens:,}")
+print(f"Estimated cost: ${estimate.estimated_cost:.2f}")
+print(f"Estimated time: {estimate.estimated_time:.1f}s")
+print(f"Cost level: {estimate.cost_level.value}")
+
+for warning in estimate.warnings:
+    print(f"Warning: {warning}")
+
+# Estimate with glossary and custom reasoning
+estimate = estimate_cost(
+    file_path=Path("document.pdf"),
+    model=ModelType.ANTHROPIC,
+    algorithm="context-aware",
+    max_cost=10.0,
+    use_glossary=True,
+    reasoning_effort="high"
+)
+```
+
+<ParamField path="file_path" type="Path" required>
+  Path to the document to estimate. Used to calculate approximate token count.
+</ParamField>
+
+<ParamField path="model" type="ModelType" required>
+  Model provider to use for cost calculation. Options: `ModelType.OPENAI`, `ModelType.ANTHROPIC`, `ModelType.GEMINI`, `ModelType.OLLAMA`.
+</ParamField>
+
+<ParamField path="algorithm" type="str" default="page">
+  Translation algorithm. Options: `"page"`, `"sliding-window"`, `"context-aware"`. Context-aware uses more input tokens due to context overhead.
+</ParamField>
+
+<ParamField path="max_cost" type="float | None" default="None">
+  Optional maximum cost threshold in USD. If provided, warnings are generated if the estimate exceeds this value.
+</ParamField>
+
+<ParamField path="use_glossary" type="bool" default="False">
+  Whether glossary is enabled. Glossary adds approximately 20% token overhead.
+</ParamField>
+
+<ParamField path="reasoning_effort" type="str" default="minimal">
+  Model reasoning effort level. Options: `"minimal"`, `"low"`, `"medium"`, `"high"`. Higher levels significantly increase cost and time.
+</ParamField>
+
+<ResponseField name="estimated_tokens" type="int">
+  Total estimated tokens (input + output).
+</ResponseField>
+
+<ResponseField name="estimated_cost" type="float">
+  Estimated cost in USD.
+</ResponseField>
+
+<ResponseField name="estimated_time" type="float">
+  Estimated time in seconds.
+</ResponseField>
+
+<ResponseField name="cost_level" type="CostLevel">
+  Cost classification: `"low"` (< $1), `"medium"` ($1-$5), `"high"` ($5-$20), or `"very_high"` (> $20).
+</ResponseField>
+
+<ResponseField name="warnings" type="list[str]">
+  List of warning messages about document size, cost thresholds, algorithm overhead, or reasoning effort.
+</ResponseField>
+
+---
+
+## create_translator
+
+Create a translator instance for performing translations.
+
+```python
+from tinbox import create_translator, TranslationConfig
+from pathlib import Path
+
+# Create translator from configuration
+config = TranslationConfig(
+    source_lang="en",
+    target_lang="fr",
+    model="anthropic",
+    model_name="claude-3-sonnet",
+    algorithm="context-aware",
+    input_file=Path("document.txt"),
+)
+
+translator = create_translator(config)
+
+# Validate the translator is properly configured
+is_valid = await translator.validate_model()
+if not is_valid:
+    print("Model validation failed")
+```
+
+<ParamField path="config" type="TranslationConfig" required>
+  Translation configuration. The model provider is determined from `config.model`.
+</ParamField>
+
+<ResponseField name="return" type="ModelInterface">
+  Configured translator instance implementing the `ModelInterface` protocol. Currently returns a `LiteLLMTranslator` instance that supports all model providers.
+</ResponseField>
+
+<Note>
+  Model selection (provider and model name) is handled per-request via `TranslationRequest.model` and `TranslationRequest.model_params`, not at translator construction time. This allows using the same translator instance with different models.
+</Note>

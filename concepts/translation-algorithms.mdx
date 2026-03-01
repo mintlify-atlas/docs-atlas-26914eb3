@@ -1,0 +1,320 @@
+---
+title: Translation Algorithms
+description: Understanding page-by-page, sliding-window, and context-aware translation algorithms in Tinbox
+---
+
+Tinbox provides three translation algorithms, each optimized for different document types and translation quality requirements. Choose the right algorithm based on your document structure and desired output quality.
+
+## Algorithm Overview
+
+<CardGroup cols={3}>
+  <Card title="Page" icon="file">
+    Translates documents page by page independently. Fast and cost-effective.
+  </Card>
+  <Card title="Sliding Window" icon="grip-lines">
+    Uses overlapping windows for consistent terminology. Best for continuous text.
+  </Card>
+  <Card title="Context-Aware" icon="brain">
+    Maintains context across chunks with smart splitting. Highest quality output.
+  </Card>
+</CardGroup>
+
+## Page-by-Page Algorithm
+
+The page-by-page algorithm translates each page independently without maintaining context between pages. This is the fastest and most cost-effective approach.
+
+### How It Works
+
+1. Each page is translated as a separate, independent request
+2. No context from previous pages is shared
+3. Failed pages are tracked and marked in the output
+4. Supports checkpoint/resume for long documents
+
+### Best For
+
+- PDF documents with distinct pages
+- Documents where pages are self-contained
+- When speed and cost are priorities
+- Large documents where context isn't critical
+
+### Code Example
+
+From `algorithms.py:147-354`:
+
+```python
+async def translate_page_by_page(
+    content: DocumentContent,
+    config: TranslationConfig,
+    translator: ModelInterface,
+    progress: Progress | None = None,
+    checkpoint_manager: CheckpointManager | None = None,
+) -> TranslationResponse:
+    """Translate a document page by page."""
+    translated_pages_by_num: dict[int, str] = {}
+    
+    # Translate pages - iterate by actual page number (1-indexed)
+    for page_num, page in enumerate(content.pages, start=1):
+        request = TranslationRequest(
+            source_lang=config.source_lang,
+            target_lang=config.target_lang,
+            content=page,
+            context=None,  # No context for page-by-page
+            content_type=content.content_type,
+            model=config.model,
+        )
+        
+        response = await translator.translate(request)
+        translated_pages_by_num[page_num] = response.text
+```
+
+### CLI Usage
+
+```bash
+tinbox translate --to de --algorithm page document.pdf
+```
+
+<Note>
+  Failed pages are marked with `[TRANSLATION_FAILED]` placeholders in the output, making failures visible while preserving the document structure.
+</Note>
+
+## Sliding Window Algorithm
+
+The sliding window algorithm combines all pages into a single text, then creates overlapping windows for translation. This ensures consistent terminology across window boundaries.
+
+### How It Works
+
+1. All pages are joined into a single continuous text
+2. Text is split into overlapping windows of configurable size
+3. Each window is translated with a specified overlap
+4. Translated windows are merged by detecting and removing duplicate overlap regions
+
+### Configuration Options
+
+- `--window-size`: Size of each window in characters (default: 2000)
+- `--overlap-size`: Overlap between windows in characters (default: 200)
+
+### Best For
+
+- Continuous text documents (novels, articles, essays)
+- DOCX and TXT files without page breaks
+- When consistent terminology is important
+- Documents with flowing narrative
+
+### Code Example
+
+From `algorithms.py:520-611`:
+
+```python
+def create_windows(
+    text: str,
+    window_size: int,
+    overlap_size: int,
+) -> list[str]:
+    """Create overlapping windows from text."""
+    windows = []
+    start = 0
+    
+    while start < len(text):
+        end = min(start + window_size, len(text))
+        window = text[start:end]
+        windows.append(window)
+        
+        if end == len(text):
+            break
+            
+        # Move start position with overlap
+        start = end - min(overlap_size, end - start)
+    
+    return windows
+
+def merge_chunks(chunks: list[str], overlap_size: int) -> str:
+    """Merge translated chunks, handling overlaps."""
+    result = chunks[0]
+    for current_chunk in chunks[1:]:
+        # Try to find the overlap region
+        for overlap_len in range(
+            min(len(result), len(current_chunk), overlap_size), 0, -1
+        ):
+            if result[-overlap_len:] == current_chunk[:overlap_len]:
+                result += "\n\n" + current_chunk[overlap_len:]
+                break
+```
+
+### CLI Usage
+
+```bash
+tinbox translate --to de --algorithm sliding-window \
+  --window-size 1500 \
+  --overlap-size 150 \
+  document.txt
+```
+
+<Warning>
+  The sliding window algorithm is not supported for image content (PDF pages converted to images). Use page-by-page or context-aware instead.
+</Warning>
+
+## Context-Aware Algorithm
+
+The context-aware algorithm provides the highest quality translations by maintaining context from previous chunks and using smart text splitting at natural boundaries.
+
+### How It Works
+
+1. Text is split at natural boundaries (paragraphs, sentences, clauses)
+2. Each chunk is translated with context from the previous chunk
+3. Context includes both the original text and its translation
+4. The next chunk preview is provided for better flow
+5. Translated chunks are directly concatenated (no merging needed)
+
+### Smart Text Splitting
+
+The algorithm splits text at natural boundaries in priority order:
+
+1. Custom split token (if provided) - ignores target size
+2. Paragraph breaks (`\n\n`)
+3. Sentence endings (`.!?` followed by space)
+4. Line breaks (`\n`)
+5. Clause boundaries (`;:,` followed by space)
+6. Word boundaries (whitespace)
+7. Hard split at target size (fallback)
+
+From `algorithms.py:614-717`:
+
+```python
+def smart_text_split(
+    text: str, 
+    target_size: int, 
+    custom_split_token: str | None = None
+) -> list[str]:
+    """Split text at natural boundaries or custom tokens."""
+    if custom_split_token:
+        return [chunk for chunk in text.split(custom_split_token) if chunk]
+    
+    # Try to find natural split points
+    chunk_text = text[current_pos:end_pos]
+    
+    # Priority 1: Paragraph breaks
+    paragraph_matches = list(re.finditer(r"\n\n", chunk_text))
+    if paragraph_matches:
+        best_split_pos = paragraph_matches[-1].end()
+    # Priority 2: Sentence endings...
+```
+
+### Context Information
+
+From `algorithms.py:720-759`:
+
+```python
+def build_translation_context_info(
+    source_lang: str,
+    target_lang: str,
+    previous_chunk: str | None = None,
+    previous_translation: str | None = None,
+    next_chunk: str | None = None,
+) -> str | None:
+    """Build context information for translation consistency."""
+    context_parts = []
+    
+    if previous_chunk and previous_translation:
+        context_parts.append(f"[PREVIOUS_CHUNK]\n{previous_chunk}\n[/PREVIOUS_CHUNK]")
+        context_parts.append(
+            f"[PREVIOUS_CHUNK_TRANSLATION]\n{previous_translation}\n[/PREVIOUS_CHUNK_TRANSLATION]"
+        )
+    
+    if next_chunk:
+        context_parts.append(f"[NEXT_CHUNK]\n{next_chunk}\n[/NEXT_CHUNK]")
+    
+    if context_parts:
+        context_parts.append(
+            "Use this context to maintain consistency in terminology and style."
+        )
+        return "\n\n".join(context_parts)
+    
+    return None
+```
+
+### Configuration Options
+
+- `--context-size`: Target chunk size in characters (default: 2000)
+- `--custom-split-token`: Custom token to split on (ignores context-size)
+
+### Best For
+
+- High-quality literary translations
+- Technical documentation requiring consistent terminology
+- Documents with complex narrative structure
+- When translation quality is the top priority
+
+### CLI Usage
+
+```bash
+# Standard context-aware translation
+tinbox translate --to de --algorithm context-aware document.txt
+
+# With custom split token
+tinbox translate --to de --algorithm context-aware \
+  --custom-split-token "---" \
+  document.txt
+
+# With custom context size
+tinbox translate --to de --algorithm context-aware \
+  --context-size 3000 \
+  document.txt
+```
+
+<Tip>
+  Use custom split tokens for documents with clear section markers. This gives you precise control over chunk boundaries while maintaining full context.
+</Tip>
+
+## Algorithm Comparison
+
+| Feature | Page-by-Page | Sliding Window | Context-Aware |
+|---------|-------------|----------------|---------------|
+| **Context** | None | Overlap only | Full context |
+| **Speed** | Fastest | Medium | Slowest |
+| **Cost** | Lowest | Medium | Highest |
+| **Quality** | Good | Better | Best |
+| **Text Splitting** | By page | Fixed windows | Smart boundaries |
+| **PDF Support** | ✅ Yes | ❌ No | ❌ No |
+| **Image Support** | ✅ Yes | ❌ No | ❌ No |
+| **Best For** | PDFs, speed | Continuous text | Quality, technical docs |
+
+## Checkpoint Support
+
+All three algorithms support checkpointing for resuming interrupted translations:
+
+```bash
+tinbox translate --to de \
+  --checkpoint-dir ./checkpoints \
+  --checkpoint-frequency 5 \
+  document.pdf
+```
+
+<Info>
+  Checkpoints save translation state every N pages/chunks. If translation is interrupted, Tinbox automatically resumes from the last checkpoint.
+</Info>
+
+## Choosing the Right Algorithm
+
+<AccordionGroup>
+  <Accordion title="When to use Page-by-Page">
+    - You're translating PDF documents
+    - Speed and cost are your primary concerns
+    - Pages are relatively self-contained
+    - You don't need perfect terminology consistency across pages
+  </Accordion>
+  
+  <Accordion title="When to use Sliding Window">
+    - You're translating continuous text (TXT, DOCX)
+    - You need consistent terminology
+    - The document has a flowing narrative
+    - You want a balance of quality and cost
+  </Accordion>
+  
+  <Accordion title="When to use Context-Aware">
+    - Translation quality is critical
+    - You need consistent terminology and style
+    - The document has complex structure
+    - You're translating technical or literary content
+    - Cost is less of a concern
+  </Accordion>
+</AccordionGroup>

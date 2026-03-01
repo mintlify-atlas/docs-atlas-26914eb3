@@ -1,0 +1,374 @@
+---
+title: "tinbox translate"
+description: "Translate documents using LLMs with support for multiple formats and translation algorithms"
+---
+
+## Overview
+
+The `tinbox translate` command translates documents using Large Language Models (LLMs). It supports multiple file formats (PDF, TXT, DOCX, MD), translation algorithms, and cloud or local models.
+
+## Basic Usage
+
+```bash
+tinbox translate <input-file> --model <provider:model> --to <target-lang>
+```
+
+<CodeGroup>
+```bash Basic Translation
+tinbox translate document.pdf --model openai:gpt-4o --to es
+```
+
+```bash With Output File
+tinbox translate story.txt --model anthropic:claude-3-sonnet --to fr --output translated.txt
+```
+
+```bash Cost Estimation (Dry Run)
+tinbox translate large-doc.pdf --model openai:gpt-4o --to de --dry-run
+```
+
+```bash With Glossary
+tinbox translate technical.md --model openai:gpt-4o --to ja --glossary --save-glossary terms.json
+```
+
+```bash Resume with Checkpoints
+tinbox translate book.pdf --model anthropic:claude-3-sonnet --to zh --checkpoint-dir ./checkpoints
+```
+
+```bash Local Model (Ollama)
+tinbox translate document.txt --model ollama:mistral-small --to es
+```
+</CodeGroup>
+
+## Arguments
+
+<ParamField path="input-file" type="Path" required>
+  The input file to translate. Must be an existing file in a supported format (PDF, TXT, DOCX, MD).
+  
+  **Example:** `./examples/elara_story.txt`
+</ParamField>
+
+## Options
+
+### Core Translation Options
+
+<ParamField path="--model" type="string" required>
+  Model specification in the format `provider:model-name`.
+  
+  **Supported providers:**
+  - `openai` - OpenAI models (requires `OPENAI_API_KEY`)
+  - `anthropic` - Anthropic Claude models (requires `ANTHROPIC_API_KEY`)
+  - `google` - Google Gemini models (requires `GOOGLE_API_KEY`)
+  - `ollama` - Local Ollama models (no API key required)
+  
+  **Examples:**
+  - `openai:gpt-4o`
+  - `anthropic:claude-3-sonnet`
+  - `google:gemini-1.5-pro`
+  - `ollama:mistral-small`
+  
+  **Alias:** `-m`
+</ParamField>
+
+<ParamField path="--to" type="string" default="en">
+  Target language code (ISO 639-1 format).
+  
+  **Examples:** `en`, `es`, `fr`, `de`, `zh`, `ja`, `ko`
+  
+  **Default:** `en` (English)
+  
+  **Alias:** `-t`
+</ParamField>
+
+<ParamField path="--from" type="string" default="auto">
+  Source language code (ISO 639-1 format). If not specified, the language is auto-detected.
+  
+  **Examples:** `en`, `es`, `fr`, `de`, `zh`, `ja`
+  
+  **Default:** Auto-detect
+  
+  **Alias:** `-f`
+</ParamField>
+
+<ParamField path="--output" type="Path">
+  The output file path. If not specified, prints the translation to stdout.
+  
+  **Example:** `--output translated.txt`
+  
+  **Alias:** `-o`
+</ParamField>
+
+<ParamField path="--format" type="enum" default="text">
+  Output format for the translation result.
+  
+  **Options:**
+  - `text` - Plain text output (default)
+  - `json` - JSON format with metadata and statistics
+  - `markdown` - Markdown formatted output
+  
+  **Default:** `text`
+  
+  **Alias:** `-F`
+</ParamField>
+
+### Algorithm & Processing Options
+
+<ParamField path="--algorithm" type="string" default="auto">
+  Translation algorithm to use. Auto-selects based on file type if not specified.
+  
+  **Options:**
+  - `page` - Process document page-by-page (required for PDFs)
+  - `sliding-window` - Use overlapping windows for context
+  - `context-aware` - Smart chunking based on content structure
+  
+  **Auto-selection:**
+  - PDF files → `page` algorithm
+  - Text files → `context-aware` algorithm
+  
+  **Note:** PDF files only support the `page` algorithm.
+  
+  **Alias:** `-a`
+</ParamField>
+
+<ParamField path="--context-size" type="integer" default="2000">
+  Target chunk size in characters for the context-aware algorithm.
+  
+  **Default:** `2000`
+</ParamField>
+
+<ParamField path="--split-token" type="string">
+  Custom token to split text on when using the context-aware algorithm.
+  
+  **Example:** `--split-token "\n\n"` (split on double newlines)
+</ParamField>
+
+<ParamField path="--pdf-dpi" type="integer" default="200">
+  DPI (dots per inch) for PDF rasterization. Higher values produce better quality but consume more tokens and increase cost.
+  
+  **PDF files only.**
+  
+  **Recommended values:**
+  - `150` - Low quality, faster, cheaper
+  - `200` - Balanced (default)
+  - `300` - High quality, slower, more expensive
+  
+  **Default:** `200`
+</ParamField>
+
+### Cost & Safety Options
+
+<ParamField path="--dry-run" type="boolean" default="false">
+  Estimate cost and tokens without performing the actual translation.
+  
+  Shows:
+  - Estimated tokens
+  - Estimated cost (USD)
+  - Estimated time
+  - Cost level (low/medium/high)
+  - Warnings
+  
+  **Default:** `false`
+</ParamField>
+
+<ParamField path="--max-cost" type="float">
+  Maximum cost threshold in USD. The translation will abort if the estimated cost exceeds this value.
+  
+  **Example:** `--max-cost 5.00`
+</ParamField>
+
+<ParamField path="--force" type="boolean" default="false">
+  Skip warning confirmations and proceed with translation automatically.
+  
+  **Default:** `false`
+</ParamField>
+
+### Checkpoint & Resume Options
+
+<ParamField path="--checkpoint-dir" type="Path">
+  Directory to store translation checkpoints. Enables resuming interrupted translations.
+  
+  **Example:** `--checkpoint-dir ./checkpoints`
+</ParamField>
+
+<ParamField path="--checkpoint-frequency" type="integer" default="1">
+  Save checkpoint every N pages or chunks.
+  
+  **Default:** `1` (save after every page/chunk)
+</ParamField>
+
+### Glossary Options
+
+<ParamField path="--glossary" type="boolean" default="false">
+  Enable glossary for consistent term translations across the document.
+  
+  **Default:** `false`
+</ParamField>
+
+<ParamField path="--glossary-file" type="Path">
+  Path to an existing glossary file (JSON format) to load initial terms from.
+  
+  **Example:** `--glossary-file technical-terms.json`
+</ParamField>
+
+<ParamField path="--save-glossary" type="Path">
+  Path to save the updated glossary after translation.
+  
+  **Example:** `--save-glossary updated-terms.json`
+</ParamField>
+
+### Model Configuration
+
+<ParamField path="--reasoning-effort" type="enum" default="minimal">
+  Model reasoning effort level. Higher levels improve translation quality but significantly increase cost and processing time.
+  
+  **Options:**
+  - `minimal` - Fastest, lowest cost (default)
+  - `low` - Slight quality improvement
+  - `medium` - Balanced quality and cost
+  - `high` - Best quality, highest cost and time
+  
+  **Default:** `minimal`
+</ParamField>
+
+### Output & Logging Options
+
+<ParamField path="--verbose" type="boolean" default="false">
+  Show detailed progress information during translation.
+  
+  **Default:** `false`
+</ParamField>
+
+## Global Options
+
+These options are available for all Tinbox commands and must be specified **before** the command name.
+
+<ParamField path="--log-level" type="string" default="INFO">
+  Set the logging level.
+  
+  **Options:** `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`
+  
+  **Default:** `INFO`
+  
+  **Alias:** `-l`
+  
+  **Example:** `tinbox --log-level DEBUG translate document.pdf --model openai:gpt-4o --to es`
+</ParamField>
+
+<ParamField path="--json" type="boolean" default="false">
+  Output logs in JSON format.
+  
+  **Default:** `false`
+  
+  **Alias:** `-j`
+  
+  **Example:** `tinbox --json translate document.pdf --model openai:gpt-4o --to es`
+</ParamField>
+
+<ParamField path="--version" type="boolean">
+  Show version information and exit.
+  
+  **Alias:** `-v`
+  
+  **Example:** `tinbox --version`
+</ParamField>
+
+## Examples
+
+### Translate PDF to Spanish
+
+```bash
+tinbox translate document.pdf --model openai:gpt-4o --to es --output document_es.txt
+```
+
+### Estimate Cost Before Translation
+
+```bash
+tinbox translate large-book.pdf --model anthropic:claude-3-sonnet --to fr --dry-run
+```
+
+### Use Local Model (Ollama)
+
+```bash
+tinbox translate story.txt --model ollama:mistral-small --to de --output story_de.txt
+```
+
+### Translation with Glossary
+
+```bash
+tinbox translate technical-manual.md \
+  --model openai:gpt-4o \
+  --to ja \
+  --glossary \
+  --glossary-file existing-terms.json \
+  --save-glossary updated-terms.json
+```
+
+### Resume Interrupted Translation
+
+```bash
+# First run (gets interrupted)
+tinbox translate long-document.pdf \
+  --model anthropic:claude-3-sonnet \
+  --to zh \
+  --checkpoint-dir ./checkpoints
+
+# Resume from checkpoint
+tinbox translate long-document.pdf \
+  --model anthropic:claude-3-sonnet \
+  --to zh \
+  --checkpoint-dir ./checkpoints
+```
+
+### High-Quality PDF Translation
+
+```bash
+tinbox translate scanned-document.pdf \
+  --model openai:gpt-4o \
+  --to es \
+  --pdf-dpi 300 \
+  --reasoning-effort medium
+```
+
+### Set Maximum Cost Limit
+
+```bash
+tinbox translate document.pdf \
+  --model openai:gpt-4o \
+  --to fr \
+  --max-cost 10.00
+```
+
+### JSON Output with Metadata
+
+```bash
+tinbox translate report.txt \
+  --model anthropic:claude-3-sonnet \
+  --to de \
+  --format json \
+  --output report_de.json
+```
+
+## Translation Workflow
+
+1. **Language Validation**: Source and target language codes are validated
+2. **Cost Estimation**: Token count and cost are estimated
+3. **User Confirmation**: Warnings are shown if applicable (skip with `--force`)
+4. **Document Loading**: Input file is loaded and processed
+5. **Translation**: Content is translated using the specified algorithm
+6. **Progress Tracking**: Real-time progress bar shows completion status
+7. **Output Generation**: Translated content is written to file or stdout
+8. **Statistics Display**: Final metrics (time, tokens, cost) are shown
+
+## Error Handling
+
+- **Invalid Language Codes**: Returns clear error messages for unsupported codes
+- **Missing API Keys**: Reports which environment variable is missing
+- **File Type Errors**: Validates file format compatibility
+- **Algorithm Conflicts**: Prevents using incompatible algorithms (e.g., non-page algorithms with PDFs)
+- **Cost Limits**: Aborts translation if estimated cost exceeds `--max-cost`
+- **Failed Pages**: Reports which pages failed with specific error messages
+
+## See Also
+
+- [tinbox doctor](/api/doctor) - Diagnostic tool for checking setup
+- [Translation Algorithms](/core-concepts/algorithms) - Detailed algorithm documentation
+- [Supported Models](/core-concepts/models) - Complete model provider list

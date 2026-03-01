@@ -1,0 +1,216 @@
+---
+title: Translating PDF Documents
+description: Learn how to translate PDF documents using vision-capable models without OCR
+---
+
+Tinbox can translate PDF files directly using vision-capable multimodal models, eliminating the need for OCR and preserving the original formatting.
+
+## Why Vision Models for PDFs?
+
+Traditional PDF translation tools rely on OCR (Optical Character Recognition), which often leads to:
+- Formatting loss
+- Text extraction errors
+- Poor handling of complex layouts
+- Issues with non-standard fonts
+
+Tinbox uses multimodal models to understand PDFs as images, providing more accurate translations while maintaining context.
+
+<Warning>
+PDF translation **requires a vision-capable model**. Text-only models will fail. Supported models include GPT-4o, Claude Sonnet, and Gemini Pro Vision.
+</Warning>
+
+## System Requirements
+
+<Steps>
+  <Step title="Install Poppler">
+    PDF processing requires the `poppler-utils` system package:
+
+    ```bash macOS
+    brew install poppler
+    ```
+
+    ```bash Linux (Ubuntu/Debian)
+    sudo apt-get install poppler-utils
+    ```
+
+    ```bash Windows (Chocolatey)
+    choco install poppler
+    ```
+  </Step>
+
+  <Step title="Install Tinbox with PDF Support">
+    ```bash
+    pip install -e ".[pdf]"
+    # Or install all features
+    pip install -e ".[all]"
+    ```
+  </Step>
+
+  <Step title="Set API Key">
+    Configure your API key for a vision-capable model provider:
+
+    ```bash
+    export OPENAI_API_KEY="your-api-key"
+    # Or use Anthropic
+    export ANTHROPIC_API_KEY="your-api-key"
+    # Or use Google
+    export GOOGLE_API_KEY="your-api-key"
+    ```
+  </Step>
+</Steps>
+
+## Basic PDF Translation
+
+PDF files automatically use the `page` algorithm, which processes documents page-by-page:
+
+```bash
+tinbox translate --to es --model openai:gpt-4o document.pdf
+```
+
+<Note>
+The `--algorithm page` flag is automatically applied for PDF files. You don't need to specify it manually.
+</Note>
+
+## Vision-Capable Models
+
+Choose from these supported vision models:
+
+<CodeGroup>
+```bash OpenAI GPT-4o
+tinbox translate --to de --model openai:gpt-4o document.pdf
+```
+
+```bash Anthropic Claude
+tinbox translate --to fr --model anthropic:claude-3-sonnet document.pdf
+```
+
+```bash Google Gemini
+tinbox translate --to es --model google:gemini-pro-vision document.pdf
+```
+</CodeGroup>
+
+## Quality Settings
+
+### Adjusting DPI
+
+Control the quality of PDF rasterization with the `--pdf-dpi` flag. Higher DPI = better quality but more tokens:
+
+```bash
+# Default (200 DPI) - balanced quality and cost
+tinbox translate --to es --model openai:gpt-4o document.pdf
+
+# Higher quality (300 DPI) - better for detailed documents
+tinbox translate --to es --pdf-dpi 300 --model openai:gpt-4o document.pdf
+
+# Lower quality (150 DPI) - faster and cheaper
+tinbox translate --to es --pdf-dpi 150 --model openai:gpt-4o document.pdf
+```
+
+<Tip>
+For most documents, the default 200 DPI provides excellent results. Use 300 DPI for documents with small text or complex diagrams.
+</Tip>
+
+### Reasoning Effort
+
+Adjust the model's reasoning effort for quality vs. cost tradeoffs:
+
+```bash
+# Minimal reasoning (default) - faster and cheaper
+tinbox translate --to de --reasoning-effort minimal --model openai:gpt-4o document.pdf
+
+# High reasoning - better quality, higher cost
+tinbox translate --to de --reasoning-effort high --model openai:gpt-4o document.pdf
+```
+
+## Large PDF Files
+
+For large PDFs, use checkpointing to enable resume functionality:
+
+```bash
+tinbox translate --to es \
+  --checkpoint-dir ./checkpoints \
+  --model openai:gpt-4o \
+  large_document.pdf
+```
+
+If the translation is interrupted, simply run the same command again to resume from the last saved checkpoint.
+
+<Note>
+Learn more about handling large documents in the [Large Documents guide](/guides/large-documents).
+</Note>
+
+## Cost Control
+
+Preview costs before translating and set spending limits:
+
+```bash
+# Dry run to estimate costs
+tinbox translate --to es --dry-run --model openai:gpt-4o document.pdf
+
+# Set maximum cost limit
+tinbox translate --to es --max-cost 10.00 --model openai:gpt-4o document.pdf
+```
+
+## Common Issues
+
+<Warning>
+**Error: PDF translation fails**
+
+This usually means:
+1. Poppler is not installed - run `tinbox doctor` to check
+2. You're using a text-only model - switch to a vision-capable model like GPT-4o
+</Warning>
+
+**Text extraction quality issues**
+- Try increasing DPI: `--pdf-dpi 300`
+- Use a higher reasoning effort: `--reasoning-effort high`
+- Ensure you're using the latest vision model
+
+**High costs**
+- Lower the DPI: `--pdf-dpi 150`
+- Use `--dry-run` first to preview costs
+- Set a budget with `--max-cost`
+
+## Complete Example
+
+Here's a complete workflow for translating a PDF with optimal settings:
+
+```bash
+# 1. Check system setup
+tinbox doctor
+
+# 2. Estimate costs
+tinbox translate --to es --dry-run --model openai:gpt-4o document.pdf
+
+# 3. Translate with checkpointing and cost limit
+tinbox translate --to es \
+  --model openai:gpt-4o \
+  --checkpoint-dir ./checkpoints \
+  --max-cost 20.00 \
+  --output document_es.pdf \
+  document.pdf
+
+# 4. If interrupted, resume
+tinbox translate --to es \
+  --model openai:gpt-4o \
+  --checkpoint-dir ./checkpoints \
+  --output document_es.pdf \
+  document.pdf
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Large Documents" icon="file-lines" href="/guides/large-documents">
+    Best practices for translating large PDFs
+  </Card>
+  <Card title="Checkpoints & Resume" icon="bookmark" href="/guides/checkpoints-and-resume">
+    Learn about checkpoint functionality
+  </Card>
+  <Card title="Using Glossaries" icon="book" href="/guides/using-glossaries">
+    Maintain consistent terminology
+  </Card>
+  <Card title="CLI Reference" icon="terminal" href="/api/translate">
+    Complete command-line reference
+  </Card>
+</CardGroup>

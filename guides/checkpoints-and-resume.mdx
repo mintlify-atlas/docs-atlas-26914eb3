@@ -1,0 +1,422 @@
+---
+title: Checkpoints and Resume
+description: Save translation progress and resume interrupted translations seamlessly
+---
+
+Checkpoints allow you to save translation progress automatically and resume from where you left off if the process is interrupted. This is essential for large documents, unstable connections, or long-running translations.
+
+## Why Use Checkpoints?
+
+Checkpoints solve several critical problems:
+
+- **Interruption Recovery** - Resume if translation is stopped or crashes
+- **Cost Protection** - Don't lose money from partial translations
+- **Progress Preservation** - Save hours of translation work
+- **Flexible Workflows** - Pause and resume at your convenience
+- **Network Resilience** - Handle connection issues gracefully
+
+<Tip>
+For any translation expected to take more than a few minutes, enable checkpoints. The overhead is minimal and the protection is invaluable.
+</Tip>
+
+## Basic Usage
+
+### Enable Checkpointing
+
+Add the `--checkpoint-dir` flag to enable automatic checkpointing:
+
+```bash
+tinbox translate --to es \
+  --checkpoint-dir ./checkpoints \
+  --model openai:gpt-5-2025-08-07 \
+  large_document.txt
+```
+
+This creates a checkpoint directory where translation state is saved.
+
+### Automatic Resume
+
+If translation is interrupted, simply run the same command again:
+
+```bash
+# Same command - automatically detects and resumes from checkpoint
+tinbox translate --to es \
+  --checkpoint-dir ./checkpoints \
+  --model openai:gpt-5-2025-08-07 \
+  large_document.txt
+```
+
+Tinbox will:
+1. Detect the existing checkpoint
+2. Validate it matches the current configuration
+3. Load completed chunks/pages
+4. Resume from the next incomplete section
+
+<Note>
+Checkpoints are automatically cleaned up when translation completes successfully.
+</Note>
+
+## How Checkpoints Work
+
+<Steps>
+  <Step title="Translation Begins">
+    When you start a translation with `--checkpoint-dir`, Tinbox creates a checkpoint file:
+
+    ```
+    checkpoints/
+    └── document_checkpoint.json
+    ```
+  </Step>
+
+  <Step title="Progress Saved Automatically">
+    After each page or chunk is translated, Tinbox saves:
+    - Completed pages/chunks
+    - Failed pages (if any)
+    - Translated content
+    - Token usage and cost
+    - Time elapsed
+    - Glossary state (if using glossaries)
+  </Step>
+
+  <Step title="Interruption Occurs">
+    If translation is interrupted (Ctrl+C, crash, connection loss), the checkpoint preserves all progress.
+  </Step>
+
+  <Step title="Resume from Checkpoint">
+    Run the same command again. Tinbox:
+    - Loads the checkpoint
+    - Validates configuration matches
+    - Skips completed work
+    - Continues from the next item
+  </Step>
+
+  <Step title="Completion and Cleanup">
+    When translation finishes successfully, the checkpoint file is automatically deleted.
+  </Step>
+</Steps>
+
+## Checkpoint Frequency
+
+Control how often checkpoints are saved:
+
+```bash
+# Save after every page/chunk (default - safest)
+tinbox translate --to es \
+  --checkpoint-dir ./checkpoints \
+  --checkpoint-frequency 1 \
+  --model openai:gpt-5-2025-08-07 \
+  document.pdf
+
+# Save every 5 pages/chunks (less I/O overhead)
+tinbox translate --to es \
+  --checkpoint-dir ./checkpoints \
+  --checkpoint-frequency 5 \
+  --model openai:gpt-5-2025-08-07 \
+  document.pdf
+
+# Save every 10 pages/chunks (minimal overhead)
+tinbox translate --to es \
+  --checkpoint-dir ./checkpoints \
+  --checkpoint-frequency 10 \
+  --model openai:gpt-5-2025-08-07 \
+  large_book.pdf
+```
+
+<Warning>
+**Tradeoff Alert:**
+- **Lower frequency (1-2)**: Maximum safety, more I/O
+- **Higher frequency (5-10)**: Less overhead, more potential loss on interruption
+
+For expensive translations, prefer lower frequencies. For local models, higher frequencies are fine.
+</Warning>
+
+## Checkpoint Validation
+
+Checkpoints are validated against the current configuration to ensure consistency:
+
+### Validated Fields
+- Source language
+- Target language
+- Model provider and name
+- Translation algorithm
+
+If any of these change, the checkpoint is invalidated and translation starts fresh.
+
+```bash
+# Original translation
+tinbox translate --to es \
+  --checkpoint-dir ./checkpoints \
+  --model openai:gpt-4o \
+  document.pdf
+
+# Different model - checkpoint invalid, starts fresh
+tinbox translate --to es \
+  --checkpoint-dir ./checkpoints \
+  --model anthropic:claude-3-sonnet \
+  document.pdf
+```
+
+<Note>
+Output file path and checkpoint frequency can change without invalidating the checkpoint.
+</Note>
+
+## Working with Different Document Types
+
+### Text Files (Context-Aware Algorithm)
+
+```bash
+tinbox translate --to fr \
+  --checkpoint-dir ./checkpoints \
+  --context-size 2000 \
+  --model openai:gpt-5-2025-08-07 \
+  novel.txt
+```
+
+Checkpoints save:
+- Completed chunks
+- Context from the last chunk (for continuity)
+- Glossary entries (if enabled)
+
+### PDF Files (Page Algorithm)
+
+```bash
+tinbox translate --to de \
+  --checkpoint-dir ./checkpoints \
+  --model openai:gpt-4o \
+  technical_manual.pdf
+```
+
+Checkpoints save:
+- Completed pages by page number
+- Failed pages (if any)
+- Per-page translations
+
+## Combining with Other Features
+
+### Checkpoints + Glossaries
+
+Checkpoints preserve glossary state:
+
+```bash
+tinbox translate --to es \
+  --checkpoint-dir ./checkpoints \
+  --glossary \
+  --save-glossary terms.json \
+  --model openai:gpt-5-2025-08-07 \
+  technical_document.pdf
+```
+
+**What's saved:**
+- All completed translations
+- Current glossary entries
+- Terms detected so far
+
+**On resume:**
+- Glossary state is restored
+- New terms continue to be added
+- Consistency is maintained
+
+### Checkpoints + Cost Limits
+
+```bash
+tinbox translate --to fr \
+  --checkpoint-dir ./checkpoints \
+  --max-cost 50.00 \
+  --model openai:gpt-5-2025-08-07 \
+  large_book.pdf
+```
+
+If the cost limit is reached:
+1. Translation stops gracefully
+2. Checkpoint saves all progress
+3. You can resume with a higher limit:
+
+```bash
+tinbox translate --to fr \
+  --checkpoint-dir ./checkpoints \
+  --max-cost 100.00 \
+  --model openai:gpt-5-2025-08-07 \
+  large_book.pdf
+```
+
+## Checkpoint File Structure
+
+Checkpoint files are JSON and contain:
+
+```json
+{
+  "source_lang": "en",
+  "target_lang": "es",
+  "algorithm": "page",
+  "completed_pages": [1, 2, 3, 4, 5],
+  "failed_pages": [],
+  "translated_chunks": {
+    "1": "Translated page 1 content...",
+    "2": "Translated page 2 content...",
+    "3": "Translated page 3 content..."
+  },
+  "token_usage": 45000,
+  "cost": 2.45,
+  "time_taken": 125.3,
+  "glossary_entries": {
+    "API": "API",
+    "database": "base de datos"
+  },
+  "config": {
+    "source_lang": "en",
+    "target_lang": "es",
+    "model": "openai",
+    "algorithm": "page"
+  }
+}
+```
+
+<Warning>
+Don't manually edit checkpoint files. They're managed atomically to prevent corruption.
+</Warning>
+
+## Advanced Usage
+
+### Multiple Checkpoints
+
+Each input file gets its own checkpoint:
+
+```bash
+# Translate multiple documents with checkpoints
+tinbox translate --to es \
+  --checkpoint-dir ./checkpoints \
+  --model openai:gpt-5-2025-08-07 \
+  document1.pdf
+
+tinbox translate --to es \
+  --checkpoint-dir ./checkpoints \
+  --model openai:gpt-5-2025-08-07 \
+  document2.pdf
+```
+
+Checkpoints are named by input file:
+```
+checkpoints/
+├── document1_checkpoint.json
+└── document2_checkpoint.json
+```
+
+### Checkpoint Directory Management
+
+```bash
+# Use project-specific checkpoint directories
+mkdir -p projects/legal-docs/checkpoints
+
+tinbox translate --to de \
+  --checkpoint-dir projects/legal-docs/checkpoints \
+  --model openai:gpt-5-2025-08-07 \
+  contract.pdf
+```
+
+### Manual Checkpoint Cleanup
+
+Checkpoints are cleaned up automatically on success, but you can manually remove them:
+
+```bash
+# Remove all checkpoints
+rm -rf checkpoints/
+
+# Remove specific checkpoint
+rm checkpoints/document_checkpoint.json
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Always Use for Large Docs" icon="check">
+    Enable checkpoints for any document expected to take >5 minutes
+  </Card>
+  <Card title="Low Frequency for Expensive" icon="dollar-sign">
+    Use `--checkpoint-frequency 1` for cloud models to protect investment
+  </Card>
+  <Card title="Organize by Project" icon="folder">
+    Use project-specific checkpoint directories
+  </Card>
+  <Card title="Version Control" icon="code-branch">
+    Add `checkpoints/` to `.gitignore`
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+**Checkpoint not being loaded**
+- Verify you're using the same `--checkpoint-dir`
+- Check that configuration matches (model, languages, algorithm)
+- Ensure checkpoint file exists and is valid JSON
+
+**"Checkpoint configuration mismatch" warning**
+- You changed model, language, or algorithm
+- Translation will start fresh (checkpoint is invalid)
+- Use identical settings to resume
+
+**Checkpoint corruption**
+- Rare, but can happen if process is killed during checkpoint write
+- Delete the checkpoint file and restart:
+  ```bash
+  rm checkpoints/document_checkpoint.json
+  ```
+
+**Resume starts from beginning**
+- Checkpoint may have been deleted or not created
+- Check that `--checkpoint-dir` directory exists and is writable
+- Verify checkpoint file is present before resuming
+
+## Complete Example
+
+Here's a complete workflow using checkpoints:
+
+```bash
+# 1. Start translation with checkpoints enabled
+tinbox translate --to es \
+  --checkpoint-dir ./checkpoints \
+  --checkpoint-frequency 1 \
+  --glossary \
+  --save-glossary book_terms.json \
+  --max-cost 50.00 \
+  --model openai:gpt-5-2025-08-07 \
+  --output book_es.txt \
+  large_book.txt
+
+# 2. If interrupted (Ctrl+C, crash, etc.), resume:
+tinbox translate --to es \
+  --checkpoint-dir ./checkpoints \
+  --checkpoint-frequency 1 \
+  --glossary \
+  --save-glossary book_terms.json \
+  --max-cost 50.00 \
+  --model openai:gpt-5-2025-08-07 \
+  --output book_es.txt \
+  large_book.txt
+
+# Output:
+# ℹ Checking for checkpoint
+# ℹ Found valid checkpoint, resuming from saved state
+# ℹ Resumed with 23 completed items
+# [Translation continues from chunk 24...]
+
+# 3. On successful completion, checkpoint is auto-cleaned
+# Final output: book_es.txt
+# Glossary saved: book_terms.json
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Large Documents" icon="file-lines" href="/guides/large-documents">
+    Learn more about handling large documents
+  </Card>
+  <Card title="Using Glossaries" icon="book" href="/guides/using-glossaries">
+    Combine checkpoints with glossary functionality
+  </Card>
+  <Card title="Translating PDFs" icon="file-pdf" href="/guides/translating-pdfs">
+    Use checkpoints for long PDF translations
+  </Card>
+  <Card title="CLI Reference" icon="terminal" href="/api/translate">
+    Complete command-line reference
+  </Card>
+</CardGroup>

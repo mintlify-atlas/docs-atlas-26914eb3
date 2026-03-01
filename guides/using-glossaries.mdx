@@ -1,0 +1,375 @@
+---
+title: Using Glossaries
+description: Maintain consistent terminology across translations with Tinbox glossaries
+---
+
+Glossaries ensure consistent translation of key terms throughout your documents. This is essential for technical documentation, brand names, product terminology, and domain-specific jargon.
+
+## What Are Glossaries?
+
+A glossary is a mapping of terms from the source language to their preferred translations in the target language. Tinbox automatically detects important terms during translation and adds them to the glossary for consistent use.
+
+**Benefits:**
+- Consistent terminology across long documents
+- Proper translation of technical terms
+- Preservation of brand names and product terms
+- Reusable terminology across multiple documents
+
+## Basic Usage
+
+### Enable Glossary
+
+Simply add the `--glossary` flag to enable automatic glossary building:
+
+```bash
+tinbox translate --to es --glossary --model openai:gpt-5-2025-08-07 document.txt
+```
+
+Tinbox will automatically:
+1. Detect important terms as it translates
+2. Build a glossary during translation
+3. Use the glossary to maintain consistency
+
+<Note>
+The glossary builds progressively as translation proceeds. Early chunks establish terms that are used consistently in later chunks.
+</Note>
+
+### Save Glossary
+
+Save the glossary for reuse with other documents:
+
+```bash
+tinbox translate --to es \
+  --glossary \
+  --save-glossary medical_terms.json \
+  --model openai:gpt-5-2025-08-07 \
+  medical_document.pdf
+```
+
+This creates a JSON file with all detected terms and their translations.
+
+## Working with Glossary Files
+
+### Glossary File Format
+
+Glossary files use a simple JSON format:
+
+```json
+{
+  "entries": {
+    "CPU": "Processeur",
+    "GPU": "Carte graphique",
+    "API": "Interface de programmation",
+    "database": "base de données",
+    "cache": "mémoire cache"
+  }
+}
+```
+
+### Using an Existing Glossary
+
+Load a pre-existing glossary to ensure specific terms are translated consistently:
+
+```bash
+tinbox translate --to fr \
+  --glossary-file company_terms.json \
+  --model openai:gpt-5-2025-08-07 \
+  company_document.docx
+```
+
+<Tip>
+Use existing glossaries for:
+- Company-specific terminology
+- Product names and features
+- Industry-standard terms
+- Previously established translations
+</Tip>
+
+### Extending a Glossary
+
+Load an existing glossary and save an extended version with new terms:
+
+```bash
+tinbox translate --to de \
+  --glossary-file base_terms.json \
+  --save-glossary extended_terms.json \
+  --model openai:gpt-5-2025-08-07 \
+  document.pdf
+```
+
+This workflow:
+1. Loads `base_terms.json` as the starting glossary
+2. Detects new terms during translation
+3. Saves combined glossary to `extended_terms.json`
+
+## Use Cases
+
+### Technical Documentation
+
+Maintain consistent translation of technical terms:
+
+<Steps>
+  <Step title="Create Initial Glossary">
+    Translate a representative document and save the glossary:
+
+    ```bash
+    tinbox translate --to es \
+      --glossary \
+      --save-glossary tech_terms.json \
+      --model openai:gpt-5-2025-08-07 \
+      api_documentation.md
+    ```
+  </Step>
+
+  <Step title="Use Across All Docs">
+    Apply the glossary to all related documents:
+
+    ```bash
+    tinbox translate --to es \
+      --glossary-file tech_terms.json \
+      --model openai:gpt-5-2025-08-07 \
+      user_guide.md
+
+    tinbox translate --to es \
+      --glossary-file tech_terms.json \
+      --model openai:gpt-5-2025-08-07 \
+      developer_guide.md
+    ```
+  </Step>
+
+  <Step title="Update and Expand">
+    Extend the glossary with new terms:
+
+    ```bash
+    tinbox translate --to es \
+      --glossary-file tech_terms.json \
+      --save-glossary tech_terms_v2.json \
+      --model openai:gpt-5-2025-08-07 \
+      advanced_topics.md
+    ```
+  </Step>
+</Steps>
+
+### Brand Consistency
+
+Ensure brand names and product terms are translated correctly:
+
+```json
+{
+  "entries": {
+    "Tinbox": "Tinbox",
+    "CloudSync": "CloudSync",
+    "DataVault": "DataVault",
+    "user dashboard": "tableau de bord utilisateur",
+    "premium tier": "niveau premium"
+  }
+}
+```
+
+```bash
+tinbox translate --to fr \
+  --glossary-file brand_terms.json \
+  --model openai:gpt-5-2025-08-07 \
+  marketing_materials.docx
+```
+
+### Medical/Legal Documents
+
+Maintain precise terminology for specialized fields:
+
+```bash
+# Medical documents
+tinbox translate --to es \
+  --glossary-file medical_glossary.json \
+  --save-glossary medical_glossary_extended.json \
+  --model openai:gpt-5-2025-08-07 \
+  patient_guide.pdf
+
+# Legal documents
+tinbox translate --to de \
+  --glossary-file legal_terms.json \
+  --model openai:gpt-5-2025-08-07 \
+  contract.docx
+```
+
+## Combining with Checkpoints
+
+Glossaries work seamlessly with checkpoint functionality:
+
+```bash
+tinbox translate --to es \
+  --checkpoint-dir ./checkpoints \
+  --glossary \
+  --save-glossary book_terms.json \
+  --model openai:gpt-5-2025-08-07 \
+  large_book.txt
+```
+
+**What happens:**
+1. Glossary builds progressively as translation proceeds
+2. Checkpoints save both translation progress AND glossary state
+3. If interrupted and resumed, glossary state is restored
+4. Final glossary is saved when translation completes
+
+<Note>
+When resuming from a checkpoint, the glossary state is automatically restored, ensuring terminology remains consistent even across interruptions.
+</Note>
+
+## Advanced Workflows
+
+### Multi-Document Translation Project
+
+<CodeGroup>
+```bash Step 1: Establish Glossary
+# Translate first document and create glossary
+tinbox translate --to fr \
+  --glossary \
+  --save-glossary project_terms.json \
+  --model openai:gpt-5-2025-08-07 \
+  document_01.pdf
+```
+
+```bash Step 2: Apply to All Docs
+# Use glossary for remaining documents
+for doc in document_02.pdf document_03.pdf document_04.pdf; do
+  tinbox translate --to fr \
+    --glossary-file project_terms.json \
+    --model openai:gpt-5-2025-08-07 \
+    --output "translated_${doc}" \
+    "${doc}"
+done
+```
+
+```bash Step 3: Update Glossary
+# If new terms appear, extend the glossary
+tinbox translate --to fr \
+  --glossary-file project_terms.json \
+  --save-glossary project_terms_final.json \
+  --model openai:gpt-5-2025-08-07 \
+  document_05.pdf
+```
+</CodeGroup>
+
+### Manual Glossary Creation
+
+You can create glossaries manually for precise control:
+
+```json
+{
+  "entries": {
+    "machine learning": "apprentissage automatique",
+    "neural network": "réseau de neurones",
+    "deep learning": "apprentissage profond",
+    "training data": "données d'entraînement",
+    "model": "modèle",
+    "inference": "inférence",
+    "hyperparameter": "hyperparamètre"
+  }
+}
+```
+
+Save this as `ml_terms.json` and use it:
+
+```bash
+tinbox translate --to fr \
+  --glossary-file ml_terms.json \
+  --model openai:gpt-5-2025-08-07 \
+  ml_paper.pdf
+```
+
+## Best Practices
+
+<Tip>
+**When to Use Glossaries:**
+- Technical documentation with specialized terminology
+- Long documents requiring consistency (books, manuals)
+- Multiple related documents (documentation sets)
+- Brand-sensitive content (marketing, product docs)
+- Regulated content (medical, legal, financial)
+</Tip>
+
+<Warning>
+**When to Skip Glossaries:**
+- Short, simple documents
+- One-time translations
+- Creative content where variety is preferred
+- Documents with no specialized terminology
+</Warning>
+
+| Scenario | Recommendation |
+|----------|----------------|
+| **Single document** | Use `--glossary` to build consistency within the doc |
+| **Related documents** | Use `--glossary-file` with shared glossary |
+| **New project** | Start with `--glossary --save-glossary` |
+| **Existing glossary** | Use `--glossary-file` and optionally `--save-glossary` to extend |
+| **Large documents** | Combine with `--checkpoint-dir` |
+
+## Glossary Management Tips
+
+### Organize by Domain
+
+Keep separate glossaries for different domains:
+
+```
+glossaries/
+├── medical_terms.json
+├── legal_terms.json
+├── tech_terms.json
+├── marketing_terms.json
+└── brand_terms.json
+```
+
+### Version Control
+
+Track glossary changes with version control:
+
+```bash
+git add glossaries/tech_terms.json
+git commit -m "Add new API terminology to tech glossary"
+```
+
+### Share Across Teams
+
+Store glossaries in a shared location for team access:
+
+```bash
+# Use shared glossary
+tinbox translate --to es \
+  --glossary-file /shared/glossaries/company_terms.json \
+  --model openai:gpt-5-2025-08-07 \
+  document.pdf
+```
+
+## Troubleshooting
+
+**Glossary not being applied**
+- Verify the glossary file path is correct
+- Check JSON format is valid
+- Ensure terms match exactly (case-sensitive)
+
+**Terms not being detected automatically**
+- Glossary detection improves with model quality
+- Consider manually creating glossary for critical terms
+- Use higher reasoning effort: `--reasoning-effort high`
+
+**Glossary file errors**
+- Validate JSON syntax (use a JSON validator)
+- Ensure "entries" key exists
+- Check for proper UTF-8 encoding
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Large Documents" icon="file-lines" href="/guides/large-documents">
+    Combine glossaries with large document handling
+  </Card>
+  <Card title="Checkpoints & Resume" icon="bookmark" href="/guides/checkpoints-and-resume">
+    Use glossaries with checkpoint functionality
+  </Card>
+  <Card title="Translating PDFs" icon="file-pdf" href="/guides/translating-pdfs">
+    Apply glossaries to PDF translations
+  </Card>
+  <Card title="CLI Reference" icon="terminal" href="/api/translate">
+    Complete command-line reference
+  </Card>
+</CardGroup>
