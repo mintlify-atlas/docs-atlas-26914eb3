@@ -48,6 +48,15 @@ Before installing Tinbox, ensure your system meets these requirements:
 
 ## Installing Tinbox
 
+<Note>
+  Tinbox is installed from source. First, clone the repository:
+  
+  ```bash
+  git clone https://github.com/strickvl/tinbox
+  cd tinbox
+  ```
+</Note>
+
 <Tabs>
   <Tab title="Recommended (All Features)">
     Install Tinbox with all features enabled (PDF, DOCX, image processing):
@@ -82,7 +91,7 @@ Before installing Tinbox, ensure your system meets these requirements:
     Install the base package (text files only):
     
     ```bash
-    pip install tinbox
+    pip install -e .
     ```
   </Tab>
 </Tabs>
