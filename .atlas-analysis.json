@@ -1,0 +1,97 @@
+{
+  "projectType": "cli-tool",
+  "projectName": "Tinbox",
+  "projectDescription": "A robust CLI tool for translating large documents using Large Language Models with smart chunking and multimodal PDF support.",
+  "theme": "aspen",
+  "primaryColor": "#4F46E5",
+  "lightColor": "#818CF8",
+  "darkColor": "#3730A3",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/translation-algorithms",
+              "concepts/document-processing",
+              "concepts/model-providers",
+              "concepts/cost-tracking"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/translating-pdfs",
+              "guides/large-documents",
+              "guides/using-glossaries",
+              "guides/checkpoints-and-resume",
+              "guides/local-models"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/algorithms-comparison",
+              "advanced/cost-optimization",
+              "advanced/output-formats",
+              "advanced/troubleshooting"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "CLI Commands",
+            "pages": [
+              "api/translate",
+              "api/doctor"
+            ]
+          },
+          {
+            "group": "Python API",
+            "pages": [
+              "api/core-functions",
+              "api/translation-config",
+              "api/document-processors",
+              "api/translation-algorithms"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Direct PDF translation using vision-capable multimodal models (no OCR needed)",
+    "Smart document handling for PDFs, Word documents, and text files",
+    "Intelligent translation algorithms with context-aware text splitting",
+    "Support for OpenAI, Anthropic, Google, and local Ollama models",
+    "Glossary support for consistent terminology across documents",
+    "Checkpoint and resume for large document translations",
+    "Cost tracking and estimation before translation",
+    "Flexible reasoning effort levels to balance quality and cost"
+  ],
+  "publicApiSurface": [
+    "tinbox translate - Main translation command",
+    "tinbox doctor - Diagnostic tool for setup validation",
+    "translate_document() - Core translation function",
+    "load_document() - Document loading and processing",
+    "estimate_cost() - Cost estimation utility",
+    "TranslationConfig - Configuration model",
+    "DocumentContent - Document representation",
+    "ModelInterface - LLM interface protocol",
+    "CheckpointManager - Resume translation support",
+    "GlossaryManager - Terminology management"
+  ]
+}
